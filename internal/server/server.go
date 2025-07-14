@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"go-rest-example/internal/db"
+	"go-rest-example/internal/handlers"
 	"go-rest-example/internal/logger"
 	"go-rest-example/internal/middleware"
 	"go-rest-example/internal/model"
@@ -18,7 +19,7 @@ import (
 var startOnce sync.Once
 
 
-func Start(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.MariaDBManager) error {
+func Start(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManager) error {
 
 	var err error
 	var r *gin.Engine
@@ -41,8 +42,7 @@ func Start(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.MariaDBMana
 
 
 // 경로 정보를 지정하고, 의존성을 주입하는 역할을 수행한다.
-func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogg
-	er, dbMgr db.MariaDBManager) (*gin.Engine, error ){
+func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManager) (*gin.Engine, error ){
 
 
 	// 1. 환경 변수에 따라서 콘솔에 변화를 준다
@@ -51,8 +51,6 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogg
 		ginMode = gin.DebugMode
 		gin.ForceConsoleColor()
 	}
-
-
 
 	gin.SetMode(ginMode)
 	gin.EnableJsonDecoderDisallowUnknownFields()
@@ -71,6 +69,36 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogg
 
 	// 3. 라우터 등록
 
+	// Health Check 도메인
+	status, sHandlerErr := handlers.NewStatusHandler(lgr, dbMgr)
+	if sHandlerErr != nil {
+		return nil, sHandlerErr
+	}
+	router.GET("/healthz", status.CheckStatus)
+
+	// 성능 모니터링
+	// internalAPIGrp := router.Group("/internal")
+	// internalAPIGrp.Use(middleware.InternalAuthMiddleware()) // use special auth middleware to handle internal employees
+	// 프로메테우스와의 연동 계획
+	// pprof.RouteRegister(internalAPIGrp, "pprof")
+	// router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// 장치 관련 도메인
+	d := dbMgr.DB()
+	deviceRepo, deviceRepoErr := db.NewDeviceRepo(lgr, d) // 테이블에 대한 데이터 레이아웃 획득
+	if deviceRepoErr != nil {
+		return nil, ordersRepoErr
+	}
+
+	deviceHandler, deviceHandlerErr := handlers.NewDeviceHandler(lgr, deviceRepo)
+	if deviceHandlerErr != nil {
+		return nil, deviceHandlerErr
+	}
+
+	deviceAPIGrp := router.Group("/device")
+	deviceAPIGrp.Use(middleware.DeviceAuthMiddleware())  // 디바이스 인증 과정을 담당하는 미들웨어
+	deviceAPIGrp.POST("",deviceHandler.Update)
+
 	// 4. 라우터 객체 반환
-	return nil, nil
+	return router, nil
 }

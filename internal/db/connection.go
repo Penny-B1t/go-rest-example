@@ -5,115 +5,116 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"go-rest-example/internal/logger"
 	"time"
 
-	"go-rest-example/internal/logger"
-
-	_ "github.com/go-sql-driver/mysql" // 데이테베이스 드라이브 구현체 추가
+	_ "github.com/go-sql-driver/mysql" // 데이터베이스 드라이버 구현체 추가
 )
+
+// --- 새로 추가된 인터페이스들 ---
+
+// DBTX는 데이터베이스 쿼리 실행기(sql.DB 또는 sql.Tx)에 대한 인터페이스입니다.
+// Repository 레이어가 이 인터페이스에 의존하게 하여 테스트 용이성을 높입니다.
+type DBTX interface {
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+}
+
+// DBManager는 데이터베이스 연결의 생명주기를 관리하는 인터페이스입니다.
+type DBManager interface {
+	DB() DBTX // DB 또는 Tx를 나타내는 DBTX 인터페이스 반환
+	Ping() error
+	Disconnect() error
+}
+
+// --- 기존 코드 (일부 수정) ---
 
 type MariaDBCredentials struct {
-    User     string
-    Password string
-    Host     string
-    Port     int
-    Database string
+	User     string
+	Password string
+	Host     string
+	Port     int
+	Database string
 }
 
-// MariaDBManager는 *sql.DB 객체를 관리합니다.
-// *sql.DB는 내부에 커넥션 풀을 가지고 있어 스레드-세이프합니다.
-// wapper 방식을 통한 이벤트 모니터링 기능 추가
 type MariaDBManager struct {
-    db     *sql.DB
-    logger *logger.AppLogger
+	db     *sql.DB
+	logger *logger.AppLogger
 }
+
+// 컴파일 타임에 MariaDBManager가 DBManager 인터페이스를 구현하는지 확인합니다.
+var _ DBManager = (*MariaDBManager)(nil)
 
 var (
-	ErrInvalidConnURL      = errors.New("failed to connect to DB, as the connection string is invalid")
+	ErrInvalidConnURL    = errors.New("failed to connect to DB, as the connection string is invalid")
 	ErrConnectionEstablish = errors.New("failed to establish connection to DB")
-	ErrClientInit          = errors.New("failed to initialize DB client")
-	ErrConnectionLeak      = errors.New("unable to disconnect from DB, potential connection leak")
-	ErrPingDB              = errors.New("failed to ping DB")
+	ErrClientInit        = errors.New("failed to initialize DB client")
+	ErrConnectionLeak    = errors.New("unable to disconnect from DB, potential connection leak")
+	ErrPingDB            = errors.New("failed to ping DB")
 )
 
-// NewMariaDBManager - MariaDB 연결을 초기화하고 Manager를 반환합니다.
-func NewMariaDBManager(creds *MariaDBCredentials, lgr *logger.AppLogger) (*MariaDBManager, error) {
-    
-    // 1. DSN (Data Source Name) 문자열 생성
-    // 형식: "user:password@tcp(host:port)/dbname?parseTime=true"
-    dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
-        creds.User,
-        creds.Password,
-        creds.Host,
-        creds.Port,
-        creds.Database,
-    )
+func NewMariaDBManager(creds *MariaDBCredentials, lgr *logger.AppLogger) (DBManager, error) {
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true", // parseTime=true 추가 권장
+		creds.User,
+		creds.Password,
+		creds.Host,
+		creds.Port,
+		creds.Database,
+	)
 
-    lgr.Info().Str("connURL", MaskConnectionDSN(creds)).Msg("connecting to MariaDB")
+	lgr.Info().Str("connURL", MaskConnectionDSN(creds)).Msg("connecting to MariaDB")
 
-    db, err := sql.Open("mysql", dsn)
-    if err != nil {
-        lgr.Error().Err(err).Msg("failed to prepare DB connection")
-        return nil, ErrClientInit
-    }
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		lgr.Error().Err(err).Msg("failed to prepare DB connection")
+		return nil, ErrClientInit
+	}
 
-    // 객체 생성 및 초기화
-    // mgr은 주소 포인터 타입이므로 주소 연산자를 사용하여 주소를 저장합니다.
-    mgr := &MariaDBManager{
-        db:     db,
-        logger: lgr,
-    }
+	mgr := &MariaDBManager{
+		db:     db,
+		logger: lgr,
+	}
 
-    // 2. Ping()으로 실제 연결 테스트
-    if err := mgr.Ping(); err != nil {
-        return nil, err
-    }
+	if err := mgr.Ping(); err != nil {
+		// Ping 실패 시 생성된 db 객체를 닫아주는 것이 좋습니다.
+		db.Close()
+		return nil, err
+	}
 
-    // 3. 커넥션 풀 설정 
-    db.SetConnMaxLifetime(time.Minute * 3)
-    db.SetMaxOpenConns(10)
-    db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(time.Minute * 3)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
 
-    return mgr, nil
+	return mgr, nil
 }
 
-// DB - sql.DB 객체를 반환하는 메서드
-// 쿼리 실행이 필요할 때 이 메서드를 통해 DB 핸들을 얻습니다.
-func (m *MariaDBManager) DB() *sql.DB {
-    return m.db
+// DB - DBTX 인터페이스를 반환합니다. *sql.DB는 DBTX를 구현하므로 그대로 반환할 수 있습니다.
+func (m *MariaDBManager) DB() DBTX {
+	return m.db
 }
 
-// Disconnect - DB 커넥션 풀을 닫습니다.
 func (m *MariaDBManager) Disconnect() error {
-    m.logger.Info().Msg("disconnecting from MariaDB")
-    return m.db.Close()
+	m.logger.Info().Msg("disconnecting from MariaDB")
+	return m.db.Close()
 }
 
-// Ping - DB 연결 상태를 확인합니다.
-// defer cancel() 을 통해 컨텍스트 취소 함수를 호출하여 컨텍스트를 종료합니다.
 func (m *MariaDBManager) Ping() error {
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-    if err := m.db.PingContext(ctx); err != nil {
-        m.logger.Error().Err(err).Msg("failed to ping DB")
-        return ErrPingDB 
-    }
-
-    return nil
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := m.db.PingContext(ctx); err != nil {
+		m.logger.Error().Err(err).Msg("failed to ping DB")
+		return ErrPingDB
+	}
+	return nil
 }
-
-// newClient - creates a new Client to connect DB.
-
-// 캡슐화를 통한 은닉화 처리리
 
 func MaskConnectionDSN(creds *MariaDBCredentials) string {
-
-    return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
-        "######",
-        "######",
-        creds.Host,
-        creds.Port,
-        creds.Database,
-    )
-
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
+		"******",
+		"******",
+		creds.Host,
+		creds.Port,
+		creds.Database,
+	)
 }
