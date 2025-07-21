@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"go-rest-example/internal/logger"
+	"go-rest-example/internal/model"
+	"go-rest-example/internal/server"
 	"os"
 	"os/signal"
 	"syscall"
@@ -93,9 +95,6 @@ func getEnvConfig() (*model.ServiceEnv, error) {
 	}
 
 	//
-
-
-
 	envConfigurations := &model.ServiceEnv{
 		Name : envName,
 		Port : port,

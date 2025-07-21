@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+
 func RequestLogMiddleware(lgr *logger.AppLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 

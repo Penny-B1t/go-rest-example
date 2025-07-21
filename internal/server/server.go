@@ -85,9 +85,9 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 
 	// 장치 관련 도메인
 	d := dbMgr.DB()
-	deviceRepo, deviceRepoErr := db.NewDeviceRepo(lgr, d) // 테이블에 대한 데이터 레이아웃 획득
+	deviceRepo, deviceRepoErr := db.NewReportsRepo(lgr, d) // 테이블에 대한 데이터 레이아웃 획득
 	if deviceRepoErr != nil {
-		return nil, ordersRepoErr
+		return nil, deviceRepoErr
 	}
 
 	deviceHandler, deviceHandlerErr := handlers.NewDeviceHandler(lgr, deviceRepo)
