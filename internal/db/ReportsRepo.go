@@ -20,22 +20,22 @@ const (
 
 // 오류 상수 선언
 var (
-	ErrInvalidRequired          = errors.New("missing required inputs to create DeviceRepo")
-	ErrFailedToCreateDeviceInfo = errors.New("failed to create device_info")
-	ErrFailedToSelectDeviceInfo = errors.New("failed to select device_info")
-	ErrFailedToDeleteDeviceInfo = errors.New("failed to delete device_info")
+	ErrInvalidReportRequired          = errors.New("missing required inputs to create ReportsRepo")
+	ErrFailedToCreateReportInfo = errors.New("failed to create device_info")
+	ErrFailedToSelectReportInfo = errors.New("failed to select device_info")
+	ErrFailedToDeleteReportInfo = errors.New("failed to delete device_info")
 	ErrInvalidIDSelect          = errors.New(" invalid ProductNumber")
 )
 
-// DevicesInfoRepo를 통해 사용할 메서드를 제약하고 규정하기 위한 인터페이스 
+// ReportsRepo를 통해 사용할 메서드를 제약하고 규정하기 위한 인터페이스 
 type ReportsDataService interface {
 	Create(ctx context.Context, di *data.DeviceInfo) (string, error)
 	GetAll(ctx context.Context) (*[]data.DeviceInfo, error)
 	GetByID(ctx context.Context, ID string) (*[]data.DeviceInfo, error)
-	DeleteByID(ctx context.Context, ID string) (string, error)
+	Delete(ctx context.Context, ID string) (string, error)
 }
 
-// Device 테이블을 접근하기 위한 커넥션 관리
+// reports 테이블을 접근하기 위한 커넥션 관리
 type ReportsRepo struct {
 	connection DBTX
 	logger     *logger.AppLogger
@@ -43,7 +43,7 @@ type ReportsRepo struct {
 
 func NewReportsRepo(lgr *logger.AppLogger, db DBTX) (*ReportsRepo, error) {
 	if lgr == nil || db == nil {
-		return nil, ErrInvalidRequired
+		return nil, ErrInvalidReportRequired
 	}
 	return &ReportsRepo{
 		connection: db,
@@ -56,7 +56,7 @@ func (d *ReportsRepo) Create(ctx context.Context, di *data.DeviceInfo) (string, 
 	// ReportAt 설정 (테이블에 DEFAULT가 없으면)
 	di.ReportAt = time.Now()
 
-	query := "INSERT INTO device_info (ProductNumber, BatteryPercent, Lat, Lon, TemperatureCelsius, IP, ErrorCode, ReportAt, ReportedStatus) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	query := "INSERT INTO reports (ProductNumber, BatteryPercent, Lat, Lon, TemperatureCelsius, IP, ErrorCode, ReportAt, ReportedStatus) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
 	result, err := d.connection.ExecContext(ctx, query,
 		di.ProductNumber,
@@ -71,7 +71,7 @@ func (d *ReportsRepo) Create(ctx context.Context, di *data.DeviceInfo) (string, 
 
 	if err != nil {
 		d.logger.Error().Err(err).Msg("failed to create device_info")
-		return "", ErrFailedToCreateDeviceInfo
+		return "", ErrFailedToCreateReportInfo
 	}
 
 	lastID, err := result.LastInsertId()
@@ -84,12 +84,12 @@ func (d *ReportsRepo) Create(ctx context.Context, di *data.DeviceInfo) (string, 
 
 // 장비 식별자 추가 필요 
 func (d *ReportsRepo) GetAll(ctx context.Context) (*[]data.DeviceInfo, error) {
-	query := "SELECT ProductNumber, BatteryPercent, Lat, Lon, TemperatureCelsius, IP, ErrorCode, ReportAt, ReportedStatus FROM device_info LIMIT ?"
+	query := "SELECT ProductNumber, BatteryPercent, Lat, Lon, TemperatureCelsius, IP, ErrorCode, ReportAt, ReportedStatus FROM reports LIMIT ?"
 
 	rows, err := d.connection.QueryContext(ctx, query, DefLimit)
 	if err != nil {
 		d.logger.Error().Err(err).Msg("failed to select device_info")
-		return nil, ErrFailedToSelectDeviceInfo
+		return nil, ErrFailedToSelectReportInfo
 	}
 	defer rows.Close()
 
@@ -117,12 +117,12 @@ func (d *ReportsRepo) GetAll(ctx context.Context) (*[]data.DeviceInfo, error) {
 
 // Device ID에 해당하는 정보 획득 (단일 반환으로 변경)
 func (d *ReportsRepo) GetByID(ctx context.Context, ID string) (*[]data.DeviceInfo, error) {
-	query := "SELECT ProductNumber, BatteryPercent, Lat, Lon, TemperatureCelsius, IP, ErrorCode, ReportAt, ReportedStatus FROM device_info WHERE ProductNumber = ? LIMIT ?"
+	query := "SELECT ProductNumber, BatteryPercent, Lat, Lon, TemperatureCelsius, IP, ErrorCode, ReportAt, ReportedStatus FROM reports WHERE ProductNumber = ? LIMIT ?"
 
 	rows, err := d.connection.QueryContext(ctx, query, ID, DefLimit)
 	if err != nil {
 		d.logger.Error().Err(err).Msg("failed to select device_info by ID")
-		return nil, ErrFailedToSelectDeviceInfo
+		return nil, ErrFailedToSelectReportInfo
 	}
 	
 	defer rows.Close()
@@ -150,19 +150,19 @@ func (d *ReportsRepo) GetByID(ctx context.Context, ID string) (*[]data.DeviceInf
 }
 
 // Device ID에 해당하는 정보 제거
-func (d *ReportsRepo) DeleteByID(ctx context.Context, ID string) (string, error) {
-	query := "DELETE FROM device_info WHERE ProductNumber = ?"
+func (d *ReportsRepo) Delete(ctx context.Context, ID string) error {
+	query := "DELETE FROM reports WHERE ProductNumber = ?"
 
 	result, err := d.connection.ExecContext(ctx, query, ID)
 	if err != nil {
 		d.logger.Error().Err(err).Msg("failed to delete device_info")
-		return "", ErrFailedToDeleteDeviceInfo
+		return ErrFailedToDeleteReportInfo
 	}
 
-	rowsAffected, err := result.RowsAffected()
+	_, err = result.RowsAffected()
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	return strconv.FormatInt(rowsAffected, 10), nil
+	return nil
 }

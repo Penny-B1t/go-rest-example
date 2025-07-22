@@ -16,6 +16,7 @@ type APIError struct {
 }
 
 type ReportReq struct {
+	ProductNumber string              `json:"productNumber" binding:"required"`
 	BatteryPercent int                `json:"batteryPercent" binding:"required"`
 	Lat float64                       `json:"lat" binding:"required"`
 	Lon float64                       `json:"lon" binding:"required"`

@@ -90,7 +90,7 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 		return nil, deviceRepoErr
 	}
 
-	deviceHandler, deviceHandlerErr := handlers.NewDeviceHandler(lgr, deviceRepo)
+	deviceHandler, deviceHandlerErr := handlers.NewReportsHandler(lgr, deviceRepo)
 	if deviceHandlerErr != nil {
 		return nil, deviceHandlerErr
 	}

@@ -12,26 +12,26 @@ import (
 	"go-rest-example/internal/logger"
 	"go-rest-example/internal/model/data"
 	"go-rest-example/internal/model/external"
+	"go-rest-example/internal/util"
 )
 
 type ReportsHandler struct {
-	dvRepo db.ReportsDataService
+	rsRepo db.ReportsDataService
+	dsRepo db.DevicesDataService
 	logger *logger.AppLogger
 }
 
-func NewDeviceHandler(lgr *logger.AppLogger, dvRepo db.ReportsDataService)(*ReportsHandler, error){
-	if lgr == nil || dvRepo == nil {
+func NewReportsHandler(lgr *logger.AppLogger, rsRepo db.ReportsDataService)(*ReportsHandler, error){
+	if lgr == nil || rsRepo == nil {
 		return nil, errors2.New("missing required parameters to create orders handler")
 	}
 
-	return &ReportsHandler{dvRepo: dvRepo, logger: lgr}, nil
+	return &ReportsHandler{rsRepo: rsRepo, logger: lgr}, nil
 }
 
-// 디바이스 신규 등록을 담당하는 API
 // Create handles POST /report.
 // TODO : device 레페지토리 findDevice 선언 필요 
 func(d *ReportsHandler) Report(c *gin.Context){
-
 	lgr, requestID := d.logger.WithReqID(c)
 	var reportReq external.ReportReq
 
@@ -42,18 +42,16 @@ func(d *ReportsHandler) Report(c *gin.Context){
 	}
 
 	// 1. 디바이스 존재 여부 검증 : 선언 필요
-	// findDevice, err := .findByID()
-	// if err != nil {
-	// 	return 
-	// }
-
-	// 2. 디바이스 식별자 할당 
-	PN := findDevice.ProductNumber
+	findDevice, err := d.dsRepo.GetByID(c, reportReq.ProductNumber)
+	if err != nil {
+		// 커스텀 에러 반환 abortWithAPIError
+		return 
+	}
 
 	// 3. 정보 업데이트 객체 준비 
-	DI := data.DeviceInfo{	
+	report := data.DeviceInfo{	
 		ReportID           : 1,
-		ProductNumber      : PN,
+		ProductNumber      : findDevice.ProductNumber,
 		BatteryPercent     : reportReq.BatteryPercent,
 		Lat                : reportReq.Lat,
 		Lon                : reportReq.Lon,
@@ -65,7 +63,7 @@ func(d *ReportsHandler) Report(c *gin.Context){
 	}
 
 	// 4. repo 호출을 통한 업데이트 진행 
-	_, err := d.dvRepo.Create(c, &DI)
+	_, err = d.rsRepo.Create(c, &report)
 	if err != nil {
 		d.abortWithAPIError(c, lgr, http.StatusBadRequest, "faild Create report row", requestID, err)
 		return 
@@ -92,21 +90,49 @@ func(d *ReportsHandler) Report(c *gin.Context){
 	c.JSON(http.StatusCreated, reportRes)
 }
 
-// 디바이스 상세 정보를 획득한다.
 // Create handles GET /update
 func(d *ReportsHandler) Update(c *gin.Context){
-	// 상위 미들웨어에서 인증 처리 
+	lgr, requestID := d.logger.WithReqID(c)
 
-	// 0. 
-}
+	// 0. 쿼리 파라미터 획득 
+	i := c.Query("ProductNumber")
 
-// 디바이스 상세 정보를 획득한다.
-// Create handles GET /setting
-func(d *ReportsHandler) Setting(c *gin.Context){
-	
+	findDevice, err := d.dsRepo.GetByID(c,i)
+	if err != nil {
+		// 커스텀 에러 선언 필요 
+		return
+	}
+
+	// 1. UpdateCheck가 허용이면서 FirmwareVersion 버전이 최신이 아닌경우 
+	if findDevice.FirmwareVersion != "" && findDevice.UpdateCheck != 0 {
+		// 커스텀 에러 선언 필요 
+		return 
+	}
+
+	// 2. 펌웨어 정보 획득
+	// TODO 경로 정보 획득 구성 필요 
+	path := "test"
+
+	// 3. 유틸 메서드 경로 유효성 검사
+	// 내부에서 파일 존재 여부도 검사 
+	err = util.PathValid(path)
+	if err != nil {
+		// 커스텀 에러 선언 필요 
+		return 
+	}
+
+	// 5. 체크썸 계산 (옵션)
+	// 내부에서 파일을 읽어 체크썸 생성 - 추가 보안 필요시 사용할 것 
+	// https://stackoverflow.com/questions/15879136/how-to-calculate-sha256-file-checksum-in-go
+	// util.CheckSum(path)
+
+	// 6. 체크썸 및 파일 정보 전송 
+	// golang gin file fileattach 차이 인지 필요 스트리밍으로 구현할 것인가? 
+	c.File(path)
 }
 
 // 에러 발생 시 응답 생성 역할 수행 
+// 
 func(d *ReportsHandler) abortWithAPIError(
 	c *gin.Context,
 	lgr zerolog.Logger,
