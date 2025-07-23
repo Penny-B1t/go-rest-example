@@ -16,7 +16,6 @@ const (
 	DefLimit  = 50
 )
 // orm을 사용하지 않은 이유?
-// 
 
 // 오류 상수 선언
 var (
@@ -32,7 +31,7 @@ type ReportsDataService interface {
 	Create(ctx context.Context, di *data.DeviceInfo) (string, error)
 	GetAll(ctx context.Context) (*[]data.DeviceInfo, error)
 	GetByID(ctx context.Context, ID string) (*[]data.DeviceInfo, error)
-	Delete(ctx context.Context, ID string) (string, error)
+	Delete(ctx context.Context, ID string)  error
 }
 
 // reports 테이블을 접근하기 위한 커넥션 관리

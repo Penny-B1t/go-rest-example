@@ -14,6 +14,7 @@ const (
 	// 디바이스가 보고하는 상태
 	ReportPowerOn  DeviceStatus = "PowerOn"  // 전원 켜짐을 보고
 	ReportPowerOff DeviceStatus = "PowerOff" // 전원 꺼짐을 보고
+	ReportError  DeviceStatus = "ERROR"      // 상태 보고 주기 시 장비 오류 
 )
 
 
@@ -44,10 +45,3 @@ type DeviceInfo struct {
 	ReportedStatus     DeviceStatus    // 디바이스가 보고하는 현재 상태 (예: PowerOn)
 }
 
-
-// DeviceUpdate는 서버가 디바이스에 응답으로 보내는 제어 정보 (DTO)
-type DeviceUpdate struct {
-	ReportCycleSec int  // 보고 주기 (초 단위)
-	PowerOff       int // 원격 종료 명령
-	Reboot         int // 원격 재부팅 명령
-}

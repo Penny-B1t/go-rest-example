@@ -21,7 +21,8 @@ type ReportsHandler struct {
 	logger *logger.AppLogger
 }
 
-func NewReportsHandler(lgr *logger.AppLogger, rsRepo db.ReportsDataService)(*ReportsHandler, error){
+// 오류 코드와 메서드 타입 사용하여 동작의 의미를 명확히 할 것 
+func NewReportsHandler(lgr *logger.AppLogger, rsRepo db.ReportsDataService, dsRepo db.DevicesDataService)(*ReportsHandler, error){
 	if lgr == nil || rsRepo == nil {
 		return nil, errors2.New("missing required parameters to create orders handler")
 	}
@@ -29,8 +30,7 @@ func NewReportsHandler(lgr *logger.AppLogger, rsRepo db.ReportsDataService)(*Rep
 	return &ReportsHandler{rsRepo: rsRepo, logger: lgr}, nil
 }
 
-// Create handles POST /report.
-// TODO : device 레페지토리 findDevice 선언 필요 
+// Create handles POST /report/.
 func(d *ReportsHandler) Report(c *gin.Context){
 	lgr, requestID := d.logger.WithReqID(c)
 	var reportReq external.ReportReq
@@ -41,10 +41,18 @@ func(d *ReportsHandler) Report(c *gin.Context){
 		return
 	}
 
-	// 1. 디바이스 존재 여부 검증 : 선언 필요
+	// 1. 객체 유효성 검사 
+	err := reportReq.Validate()
+	if err != nil {
+		d.abortWithAPIError(c, lgr, http.StatusBadRequest, "Invalid report request body", requestID, err)
+		return 
+	}
+
+	// 2. 디바이스 존재 여부 검증 : 선언 필요
 	findDevice, err := d.dsRepo.GetByID(c, reportReq.ProductNumber)
 	if err != nil {
-		// 커스텀 에러 반환 abortWithAPIError
+		// 404 에러 반환 
+		d.abortWithAPIError(c, lgr, http.StatusNotFound, "faild to find product", requestID, err)
 		return 
 	}
 
@@ -65,22 +73,24 @@ func(d *ReportsHandler) Report(c *gin.Context){
 	// 4. repo 호출을 통한 업데이트 진행 
 	_, err = d.rsRepo.Create(c, &report)
 	if err != nil {
-		d.abortWithAPIError(c, lgr, http.StatusBadRequest, "faild Create report row", requestID, err)
+		d.abortWithAPIError(c, lgr, http.StatusBadRequest, "faild to Create report", requestID, err)
 		return 
 	}
-	// 5. 제어 로직 생성
-	power := 0  // 재부팅이 3회 이상 반복된 경우 
+
+	// 5. 제어 로직 생성 // 재부팅이 3회 이상 반복된 경우 
+	power := 0  
 	if findDevice.ReTry >= 3 {
 		power = 1
 	}
-	// device 필드에 count 확인 
-	reboot := 0 // 에러코드가 0이 아닌 경우  / device 필드에 count 증가가 
+
+	// 에러코드가 0이 아닌 경우  / device 필드에 count 증가가 
+	reboot := 0 
 	if power != 1 && reportReq.ErrorCode != 0 {
 		reboot = 1
 	}
 
 	// 주기 보고 시간 할당 
-	reportRes := data.DeviceUpdate{
+	reportRes := external.DeviceUpdate{
 		ReportCycleSec : 100,
 		PowerOff       : power,
 		Reboot         : reboot,
@@ -90,34 +100,37 @@ func(d *ReportsHandler) Report(c *gin.Context){
 	c.JSON(http.StatusCreated, reportRes)
 }
 
-// Create handles GET /update
+// Select handles GET /report/update
 func(d *ReportsHandler) Update(c *gin.Context){
 	lgr, requestID := d.logger.WithReqID(c)
 
 	// 0. 쿼리 파라미터 획득 
 	i := c.Query("ProductNumber")
 
+	// 0. (옵션) 상위 AuthGuard에서 검증하여 코드 간결화 가능 
 	findDevice, err := d.dsRepo.GetByID(c,i)
 	if err != nil {
-		// 커스텀 에러 선언 필요 
+		// 500 오류 코드 반환 
+		d.abortWithAPIError(c, lgr, http.StatusBadRequest, "faild to find Prucut",requestID, err)
 		return
 	}
 
 	// 1. UpdateCheck가 허용이면서 FirmwareVersion 버전이 최신이 아닌경우 
 	if findDevice.FirmwareVersion != "" && findDevice.UpdateCheck != 0 {
-		// 커스텀 에러 선언 필요 
+		// 404 오류 코드 반환 
+		d.abortWithAPIError(c, lgr, http.StatusNotFound, "update has not been approved",requestID, err)
 		return 
 	}
 
 	// 2. 펌웨어 정보 획득
-	// TODO 경로 정보 획득 구성 필요 
 	path := "test"
 
 	// 3. 유틸 메서드 경로 유효성 검사
 	// 내부에서 파일 존재 여부도 검사 
 	err = util.PathValid(path)
 	if err != nil {
-		// 커스텀 에러 선언 필요 
+		// 404 오류 코드 반환 
+		d.abortWithAPIError(c, lgr, http.StatusNotFound, "file cannot be found",requestID, err)
 		return 
 	}
 
@@ -132,7 +145,7 @@ func(d *ReportsHandler) Update(c *gin.Context){
 }
 
 // 에러 발생 시 응답 생성 역할 수행 
-// 
+// 공용 에러 핸들러로 전환 필요 
 func(d *ReportsHandler) abortWithAPIError(
 	c *gin.Context,
 	lgr zerolog.Logger,

@@ -83,20 +83,26 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 	// pprof.RouteRegister(internalAPIGrp, "pprof")
 	// router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// 장치 관련 도메인
+	// 보고 데이터 레이어 획득
 	d := dbMgr.DB()
-	deviceRepo, deviceRepoErr := db.NewReportsRepo(lgr, d) // 테이블에 대한 데이터 레이아웃 획득
-	if deviceRepoErr != nil {
+	rpRepo, deviceRepoErr := db.NewReportsRepo(lgr, d) 
+	if rpRepo != nil {
 		return nil, deviceRepoErr
 	}
 
-	deviceHandler, deviceHandlerErr := handlers.NewReportsHandler(lgr, deviceRepo)
+	// 장치 관련 데이터 레이어 획득
+	dvRepo, deviceRepoErr := db.NewDevicesRepo(lgr, d)
+	if dvRepo != nil {
+		return nil, deviceRepoErr
+	}
+
+	deviceHandler, deviceHandlerErr := handlers.NewReportsHandler(lgr, rpRepo, dvRepo)
 	if deviceHandlerErr != nil {
 		return nil, deviceHandlerErr
 	}
 
 	deviceAPIGrp := router.Group("/device")
-	deviceAPIGrp.Use(middleware.DeviceAuthMiddleware())  // 디바이스 인증 과정을 담당하는 미들웨어
+	deviceAPIGrp.Use(middleware.AuthMiddleware())  // 디바이스 인증 과정을 담당하는 미들웨어
 	deviceAPIGrp.POST("",deviceHandler.Update)
 
 	// 4. 라우터 객체 반환
