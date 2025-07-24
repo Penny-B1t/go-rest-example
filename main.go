@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go-rest-example/internal/db"
 	"go-rest-example/internal/logger"
 	"go-rest-example/internal/model"
 	"go-rest-example/internal/server"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
+	"time"
 	// "syrconv"
 	// "time"
 	// internal
@@ -49,7 +52,7 @@ func run() error {
 	lgr := logger.Setup(svcenv.LogLevel, svcenv.Name)
 	
 	//setup : database 연결
-	dbConnMgr, dbErr := setupDB()
+	dbConnMgr, dbErr := setupDB(lgr, svcenv)
 	if dbErr != nil {
 		return dbErr
 	}
@@ -57,12 +60,32 @@ func run() error {
 	go func(){
 		errChan <- server.Start(svcenv, lgr, dbConnMgr)
 	}()
+
+	lgr.Info().
+		Str("name", serviceName).
+		Str("environment", svcenv.Name).
+		Str("started at", time.Now().UTC().Format(time.RFC3339)).
+		Str("version", version).
+		Msg("starting the service")
+
+	// Wait until termination or a critical error
+	select {
+	case <-ctx.Done():
+		lgr.Info().Msg("graceful shutdown signal received")
+		err := <-errChan // wait for go routines to exit
+		cleanup(lgr, dbConnMgr)
+		return err
+	case err := <-errChan:
+		lgr.Error().Err(err).Msg("something went wrong")
+		cleanup(lgr, dbConnMgr)
+		return err
+	}
 	
 }
 
 // .env 파일을 읽어 시스템 동작에 사용한다.
 // builder 패턴을 사용하여 환경 변수 객체의 주소값을 반환한다.
-// TODO ServiceEnv 구조체 model 정의 필요
+// TODO ServiceEnv 구조체 형태 변경에 따른 조건식 변경 
 func getEnvConfig() (*model.ServiceEnv, error) {
 
 	// 작업 환경 구분
@@ -85,7 +108,6 @@ func getEnvConfig() (*model.ServiceEnv, error) {
 	if dbname == "" {
 		return nil, errors.New("dbname is required")
 	}
-
 	
 
 	// 로그 레벨 지정
@@ -112,4 +134,34 @@ func exitCode(err error) int {
 		return 0
 	}
 	return 1
+}
+
+
+func setupDB(lgr *logger.AppLogger, svcEnv *model.ServiceEnv) (db.DBManager, error) {
+	portInt, err := strconv.Atoi(svcEnv.Port)
+	if err != nil {
+		return nil, fmt.Errorf("invalid port: %v", err)
+	}
+	connOpts := &db.MariaDBCredentials{
+		User:     "root",
+		Password: svcEnv.Password,
+		Host:     svcEnv.Host,
+		Port:     portInt,
+		Database: svcEnv.DBname,
+	}
+
+	dbConnMgr, dberr := db.NewMariaDBManager(connOpts, lgr)
+	if dberr != nil {
+		return nil, dberr
+	}
+
+	return dbConnMgr, nil
+
+}
+	
+func cleanup(lgr *logger.AppLogger, dbConnMgr db.DBManager) {
+	if err := dbConnMgr.Disconnect(); err != nil {
+		lgr.Error().Err(err).Msg("failed to close DB connection, potential connection leak")
+		return
+	}
 }

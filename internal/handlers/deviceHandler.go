@@ -3,11 +3,13 @@ package handlers
 import (
 	errors2 "errors"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"go-rest-example/internal/db"
 	"go-rest-example/internal/logger"
+	"go-rest-example/internal/model/data"
 	"go-rest-example/internal/model/external"
 )
 
@@ -45,11 +47,31 @@ func(d *ReportsHandler) Create(c *gin.Context){
 	}
 
 	// 2. DB 중복 객체 존재 여부 확인
+	findDevice, err := d.dsRepo.GetByID(c, deviceReq.ProductNumber)
+	if err != nil || findDevice != nil {
+		// 커스텀 에러 선언 필요 
+		return 
+	}
 
 	// 3. 객체 생성을 위한 도메인 엔티티 생성
+	newDevice := data.Device{
+		InternalID 	  : 1, 
+		ProductNumber : deviceReq.ProductNumber,
+		MacAddress    : deviceReq.MacAddress,
+		FirmwareVersion : deviceReq.FirmwareVersion,  
+		LastSeenAt    : time.Now(),
+		CreatedAt     : time.Now(),
+		ReTry         : 0,
+		UpdateCheck   : 0,
+		Status        : data.StatusReady,
+	}
 
-	// 4. 응답 반환
-	// JSON 형식 따를지 확인 필요
+	_, err = d.dsRepo.Create(c, &newDevice)
+	if err != nil {
+		// 커스텀 에러 선언 필요 
+		return 
+	}
+
 	c.String(http.StatusCreated, "update is ok" )
 }
 
@@ -67,7 +89,12 @@ func(d *ReportsHandler) GetByID(c *gin.Context){
 	i := c.Query("ID") 
 
 	// 1. 데이터 레이어를 통한 정보 획득 
+	findDevice, err := d.dsRepo.GetByID(c, i)
+	if err != nil {
+		// 커스텀 에러 선언 필요 
+		return
+	}
 
 	// 2. 정보 반환
-	c.JSON(http.StatusCreated, nil)
+	c.JSON(http.StatusCreated, findDevice)
 }

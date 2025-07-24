@@ -3,6 +3,7 @@ package external
 import (
 	"errors"
 	"go-rest-example/internal/model/data"
+	"regexp"
 	"time"
 )
 
@@ -37,6 +38,28 @@ type DeviceReq struct {
 }
 
 func (d *DeviceReq)Validate() error{
+
+	// 옵션 정규표현식 사용 가능 
+	if len(d.ProductNumber) > 9 {
+		return errors.New("커스텀 에러") 
+	}
+
+	// mac 주소 형식 검사 
+	macAddressPattern := `^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$`
+	re := regexp.MustCompile(macAddressPattern)
+	result := re.MatchString(d.MacAddress)
+	if !result {
+		return errors.New("커스텀 에러")
+	}
+	
+	// 버전 문자열 형식 검사 
+	re = regexp.MustCompile(`(?i)[0-9]+\.\d\d\.\d\d`)
+	result = re.MatchString(d.FirmwareVersion)
+	if !result {
+		return errors.New("커스텀 에러")
+	}
+
+
 	return nil
 }
 
