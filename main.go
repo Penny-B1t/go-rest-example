@@ -138,7 +138,7 @@ func exitCode(err error) int {
 
 
 func setupDB(lgr *logger.AppLogger, svcEnv *model.ServiceEnv) (db.DBManager, error) {
-	portInt, err := strconv.Atoi(svcEnv.Port)
+	portInt, err := strconv.Atoi(svcEnv.DBPort)
 	if err != nil {
 		return nil, fmt.Errorf("invalid port: %v", err)
 	}
