@@ -88,8 +88,8 @@ func(r *ReportReq)Validate() error {
     }
 
 	// 국내 위도 범위 검증 
-	if r.Lat < 124 || r.Lat > 132 {
-        return errors.New("latitude must be between 124 and 132")
+	if r.Lon < 124 || r.Lon > 132 {
+        return errors.New("longitude must be between 124 and 132")
     }
 
 	// 제품 명칭 길이 : 정규 표현식 사용 고려 
