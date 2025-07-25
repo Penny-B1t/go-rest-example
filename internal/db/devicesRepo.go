@@ -51,7 +51,7 @@ func (d *DevicesRepo) Create(ctx context.Context, di *data.Device)(string, error
 	// 쿼리문 생성
 	query := "INSERT INTO devices " +
 	"( ProductNumber, MacAddress, FirmwareVersion, LastSeenAt, CreatedAt, ReTry, UpdateCheck, Status)" +
-	"VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	"VALUES ( ?, ?, ?, ?, ?, ?, ?, ?)"
 
 	// 쿼리문 실행
 	result, err := d.connection.ExecContext(
