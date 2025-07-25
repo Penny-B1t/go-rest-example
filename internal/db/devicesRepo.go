@@ -194,7 +194,6 @@ func (d *DevicesRepo) Delete(ctx context.Context, productNumber string)  error {
 	return nil
 }
 
-// 조건문 생성 로직 분리
 // 조건문 생성 기능만을 담당하는 함수 : 역할 분리 
 func (d *DevicesRepo) GenerateUpdateQuery(parmas *external.UpdateDeviceParams) (string, []interface{}) {
 
