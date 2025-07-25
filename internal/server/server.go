@@ -96,14 +96,19 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 		return nil, deviceRepoErr
 	}
 
-	deviceHandler, deviceHandlerErr := handlers.NewReportsHandler(lgr, rpRepo, dvRepo)
+	deviceHandler, deviceHandlerErr := handlers.NewDevicesHandler(lgr, dvRepo)
 	if deviceHandlerErr != nil {
 		return nil, deviceHandlerErr
 	}
-
+	
 	deviceAPIGrp := router.Group("/device")
 	deviceAPIGrp.Use(middleware.AuthMiddleware())  // 디바이스 인증 과정을 담당하는 미들웨어
-	deviceAPIGrp.POST("",deviceHandler.Update)
+	deviceAPIGrp.POST("",deviceHandler.Create)
+	deviceAPIGrp.GET("",deviceHandler.GetAll)
+	deviceAPIGrp.GET("",deviceHandler.GetByID)
+
+	// report router 등록 필요 
+	// TODO 라우터 등록 필요 
 
 	// 4. 라우터 객체 반환
 	return router, nil
