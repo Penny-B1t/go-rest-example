@@ -203,15 +203,6 @@ func (d *DevicesRepo) GenerateUpdateQuery(parmas *external.UpdateDeviceParams) (
 	argId := 1
 
 	// 2. 파라미터로 받은 값들을 확인하며 쿼리 조립
-
-
-	// 4. 최종 쿼리문 생성
-	query := fmt.Sprintf(
-		"UPDATE devices SET %s WHERE ProductNumber = $%d",
-		strings.Join(setClauses, ", "),
-		argId,
-	)
-
 	if parmas.FirmwareVersion != nil {
 		setClauses = append(setClauses, fmt.Sprintf("FirmwareVersion = $%d", argId))
 		args = append(args, parmas.FirmwareVersion)
@@ -234,6 +225,14 @@ func (d *DevicesRepo) GenerateUpdateQuery(parmas *external.UpdateDeviceParams) (
 	if len(setClauses) == 0 {
 		return "", nil
 	}
+
+	// 4. 최종 쿼리문 생성
+	query := fmt.Sprintf(
+		"UPDATE devices SET %s WHERE ProductNumber = $%d",
+		strings.Join(setClauses, ", "),
+		argId,
+	)
+
 
 	return query, args
 }
