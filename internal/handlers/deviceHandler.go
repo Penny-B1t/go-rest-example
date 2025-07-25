@@ -28,7 +28,7 @@ func NewDevicesHandler(lgr *logger.AppLogger,dsRepo db.DevicesDataService )(*Dev
 
 
 // Create handles POST /device.
-func(d *ReportsHandler) Create(c *gin.Context){
+func(d *DevicesHandler) Create(c *gin.Context){
 	// lgr, requestID := d.logger.WithReqID(c)
 	var deviceReq external.DeviceReq
 
@@ -76,7 +76,7 @@ func(d *ReportsHandler) Create(c *gin.Context){
 }
 
 // Select handles GET /device.
-func(d *ReportsHandler) GetAll(c *gin.Context){
+func(d *DevicesHandler) GetAll(c *gin.Context){
 	// 0. 데이터 레이어를 통한 정보 획득 
 
 	// 1. 정보 반환 
@@ -84,7 +84,7 @@ func(d *ReportsHandler) GetAll(c *gin.Context){
 }
 
 // Select handles GET /device/ID=.
-func(d *ReportsHandler) GetByID(c *gin.Context){
+func(d *DevicesHandler) GetByID(c *gin.Context){
 	// 0. 쿼리 파라미터 획득 
 	i := c.Query("ID") 
 
