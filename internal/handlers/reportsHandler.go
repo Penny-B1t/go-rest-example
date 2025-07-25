@@ -30,7 +30,7 @@ func NewReportsHandler(lgr *logger.AppLogger, rsRepo db.ReportsDataService, dsRe
 	return &ReportsHandler{rsRepo: rsRepo, logger: lgr}, nil
 }
 
-// Create handles POST /report/.
+// Create handles GET /report/.
 func(d *ReportsHandler) Report(c *gin.Context){
 	lgr, requestID := d.logger.WithReqID(c)
 	var reportReq external.ReportReq

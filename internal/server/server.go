@@ -56,7 +56,6 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 	gin.EnableJsonDecoderDisallowUnknownFields()
 
 	// 2. 미들웨어 등록
-	// 기본적인 서비스 구성 미들웨어 지정
 	gin.DefaultWriter = io.Discard
 	router := gin.New();
 	
@@ -66,8 +65,6 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 	router.Use(middleware.ResponseHeadersMiddleware())
 	router.Use(middleware.RequestLogMiddleware(lgr))
 
-
-	// 3. 라우터 등록
 
 	// Health Check 도메인
 	status, sHandlerErr := handlers.NewStatusHandler(lgr, dbMgr)
@@ -83,14 +80,14 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 	// pprof.RouteRegister(internalAPIGrp, "pprof")
 	// router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// 보고 데이터 레이어 획득
+
+	// 0. 데이터 레이어 획득 
 	d := dbMgr.DB()
-	rpRepo, deviceRepoErr := db.NewReportsRepo(lgr, d) 
-	if rpRepo != nil {
-		return nil, deviceRepoErr
+	rpRepo, reportRepoErr := db.NewReportsRepo(lgr, d) 
+	if reportRepoErr != nil {
+		return nil, reportRepoErr
 	}
 
-	// 장치 관련 데이터 레이어 획득
 	dvRepo, deviceRepoErr := db.NewDevicesRepo(lgr, d)
 	if dvRepo != nil {
 		return nil, deviceRepoErr
@@ -101,14 +98,22 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 		return nil, deviceHandlerErr
 	}
 	
+	// 0. 의존성 주입 및 라우터 등록 
 	deviceAPIGrp := router.Group("/device")
 	deviceAPIGrp.Use(middleware.AuthMiddleware())  // 디바이스 인증 과정을 담당하는 미들웨어
 	deviceAPIGrp.POST("",deviceHandler.Create)
 	deviceAPIGrp.GET("",deviceHandler.GetAll)
-	deviceAPIGrp.GET("",deviceHandler.GetByID)
+	deviceAPIGrp.GET("/:ID",deviceHandler.GetByID)
 
-	// report router 등록 필요 
-	// TODO 라우터 등록 필요 
+	// repot API 등록 
+	reportHandler, reportHandlerErr := handlers.NewReportsHandler(lgr, rpRepo, dvRepo)
+	if reportHandlerErr != nil {
+		return nil, reportHandlerErr
+	}
+
+	reportAPIGrp := router.Group("/report")
+	reportAPIGrp.POST("",reportHandler.Report)
+	reportAPIGrp.GET("",reportHandler.Update)
 
 	// 4. 라우터 객체 반환
 	return router, nil

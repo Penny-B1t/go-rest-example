@@ -85,30 +85,55 @@ func run() error {
 
 // .env 파일을 읽어 시스템 동작에 사용한다.
 // builder 패턴을 사용하여 환경 변수 객체의 주소값을 반환한다.
-// TODO ServiceEnv 구조체 형태 변경에 따른 조건식 변경 
 func getEnvConfig() (*model.ServiceEnv, error) {
-
 	// 작업 환경 구분
 	// 기본값 local
-	envName := os.Getenv("enviroment")
+	envName := os.Getenv("enviroment") // 오타: environment -> enviroment (.env 파일과 일치)
 	if envName == "" {
 		envName = "local"
 	}
 
-	// 포트 번호를 확인하는 작업
+	// 애플리케이션 포트 번호
 	// 기본값 8080
 	port := os.Getenv("port")
 	if port == "" {
 		port = defaultPort
 	}
 
-	// DB 명칭을 확인
+	// 데이터베이스 호스트 정보
+	// 기본값 localhost
+	host := os.Getenv("host")
+	if host == "" {
+		host = "localhost"
+	}
+
+	// 데이터베이스 사용자 정보
+	// 기본값 root
+	user := os.Getenv("user")
+	if user == "" {
+		user = "root"
+	}
+
+	// 데이터베이스 패스워드
+	// 필수 (보안상 기본값 없음)
+	password := os.Getenv("password")
+	if password == "" {
+		return nil, errors.New("database password is required")
+	}
+
+	// 데이터베이스 포트 번호
+	// 기본값 3306 (MySQL/MariaDB 기본 포트)
+	dbPort := os.Getenv("dbport")
+	if dbPort == "" {
+		dbPort = "3306"
+	}
+
+	// DB 명칭 확인
 	// 필수
 	dbname := os.Getenv("dbname")
 	if dbname == "" {
-		return nil, errors.New("dbname is required")
+		return nil, errors.New("database name is required")
 	}
-	
 
 	// 로그 레벨 지정
 	logLevel := os.Getenv("logLevel")
@@ -116,12 +141,16 @@ func getEnvConfig() (*model.ServiceEnv, error) {
 		logLevel = defaultLogLevel
 	}
 
-	//
+	// ServiceEnv 구조체 생성 및 반환
 	envConfigurations := &model.ServiceEnv{
-		Name : envName,
-		Port : port,
-		DBname : dbname,
-		LogLevel : logLevel,
+		Name:     envName,
+		Host:     host,
+		User:     user,
+		Password: password,
+		Port:     port,
+		DBPort:   dbPort,
+		DBname:   dbname,
+		LogLevel: logLevel,
 	}
 
 	return envConfigurations, nil
