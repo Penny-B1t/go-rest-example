@@ -22,12 +22,16 @@ type ReportsHandler struct {
 }
 
 // 오류 코드와 메서드 타입 사용하여 동작의 의미를 명확히 할 것 
-func NewReportsHandler(lgr *logger.AppLogger, rsRepo db.ReportsDataService, dsRepo db.DevicesDataService)(*ReportsHandler, error){
-	if lgr == nil || rsRepo == nil {
-		return nil, errors2.New("missing required parameters to create orders handler")
+func NewReportsHandler(lgr *logger.AppLogger, rsRepo db.ReportsDataService, dsRepo db.DevicesDataService) (*ReportsHandler, error) {
+	if lgr == nil || rsRepo == nil || dsRepo == nil {
+		return nil, errors2.New("missing required parameters to create reports handler")
 	}
 
-	return &ReportsHandler{rsRepo: rsRepo, logger: lgr}, nil
+	return &ReportsHandler{
+		rsRepo: rsRepo, 
+		dsRepo: dsRepo,
+		logger: lgr,
+	}, nil
 }
 
 // Create handles GET /report/.

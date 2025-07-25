@@ -89,7 +89,7 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 	}
 
 	dvRepo, deviceRepoErr := db.NewDevicesRepo(lgr, d)
-	if dvRepo != nil {
+	if deviceRepoErr != nil {
 		return nil, deviceRepoErr
 	}
 
@@ -113,7 +113,7 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 
 	reportAPIGrp := router.Group("/report")
 	reportAPIGrp.POST("",reportHandler.Report)
-	reportAPIGrp.GET("",reportHandler.Update)
+	reportAPIGrp.PATCH("",reportHandler.Update)
 
 	// 4. 라우터 객체 반환
 	return router, nil

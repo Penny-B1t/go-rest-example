@@ -156,6 +156,9 @@ func (d *DevicesRepo) update(ctx context.Context, ID string, parmas *external.Up
 		return errors.New("non Query")
 	}
 
+	// 식별자 추가 
+	args = append(args, ID)
+
 	// 5. 쿼리 실행
     result, err := d.connection.ExecContext(ctx, query, args...)
     if err != nil {
@@ -195,29 +198,34 @@ func (d *DevicesRepo) Delete(ctx context.Context, productNumber string)  error {
 }
 
 // 조건문 생성 기능만을 담당하는 함수 : 역할 분리 
-func (d *DevicesRepo) GenerateUpdateQuery(parmas *external.UpdateDeviceParams) (string, []interface{}) {
-
+func (d *DevicesRepo) GenerateUpdateQuery(params *external.UpdateDeviceParams) (string, []interface{}) {
 	setClauses := []string{}
 	args := []interface{}{}
-	argId := 1
 
-	// 2. 파라미터로 받은 값들을 확인하며 쿼리 조립
-	if parmas.FirmwareVersion != nil {
-		setClauses = append(setClauses, fmt.Sprintf("FirmwareVersion = $%d", argId))
-		args = append(args, parmas.FirmwareVersion)
-		argId++
+	// 2. 파라미터로 받은 값들을 확인하며 쿼리 조립 (MySQL용 ? 플레이스홀더 사용)
+	if params.FirmwareVersion != nil {
+		setClauses = append(setClauses, "FirmwareVersion = ?")
+		args = append(args, *params.FirmwareVersion)
 	}
 
-	if parmas.LastSeenAt != nil {
-		setClauses = append(setClauses, fmt.Sprintf("LastSeenAt = $%d", argId))
-        args = append(args, *parmas.LastSeenAt)
-        argId++
+	if params.LastSeenAt != nil {
+		setClauses = append(setClauses, "LastSeenAt = ?")
+		args = append(args, *params.LastSeenAt)
 	}
 
-	if parmas.ReTry != nil {
-		setClauses = append(setClauses, fmt.Sprintf("ReTry = $%d", argId))
-        args = append(args, *parmas.ReTry)
-        argId++
+	if params.ReTry != nil {
+		setClauses = append(setClauses, "ReTry = ?")
+		args = append(args, *params.ReTry)
+	}
+
+	if params.UpdateCheck != nil {
+		setClauses = append(setClauses, "UpdateCheck = ?")
+		args = append(args, *params.UpdateCheck)
+	}
+
+	if params.Status != nil {
+		setClauses = append(setClauses, "Status = ?")
+		args = append(args, *params.Status)
 	}
 
 	// 3. 변경할 내용이 없으면 아무것도 하지 않고 종료
@@ -225,13 +233,11 @@ func (d *DevicesRepo) GenerateUpdateQuery(parmas *external.UpdateDeviceParams) (
 		return "", nil
 	}
 
-	// 4. 최종 쿼리문 생성
+	// 4. 최종 쿼리문 생성 (WHERE 조건의 ID는 마지막에 추가)
 	query := fmt.Sprintf(
-		"UPDATE devices SET %s WHERE ProductNumber = $%d",
+		"UPDATE devices SET %s WHERE ProductNumber = ?",
 		strings.Join(setClauses, ", "),
-		argId,
 	)
-
 
 	return query, args
 }

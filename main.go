@@ -4,18 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go-rest-example/internal/db"
-	"go-rest-example/internal/logger"
-	"go-rest-example/internal/model"
-	"go-rest-example/internal/server"
+
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
 	"time"
-	// "syrconv"
-	// "time"
-	// internal
+
+	"go-rest-example/internal/db"
+	"go-rest-example/internal/logger"
+	"go-rest-example/internal/model"
+	"go-rest-example/internal/server"
 )
 
 // 상수 선언언
@@ -172,7 +171,7 @@ func setupDB(lgr *logger.AppLogger, svcEnv *model.ServiceEnv) (db.DBManager, err
 		return nil, fmt.Errorf("invalid port: %v", err)
 	}
 	connOpts := &db.MariaDBCredentials{
-		User:     "root",
+		User:     svcEnv.User,
 		Password: svcEnv.Password,
 		Host:     svcEnv.Host,
 		Port:     portInt,
