@@ -6,6 +6,7 @@ type ServiceEnv struct {
 	User string    // 유저 정보
 	Password string // 로그인 정보 
 	Port string   // 포트 번호
+	DBPort string 
 	DBname string // 데이터베이스 이름
 	LogLevel string // 로깅 레벨
 }
