@@ -84,23 +84,18 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 
 	// 0. 데이터 레이어 획득 
 	d := dbMgr.DB()
-	rpRepo, reportRepoErr := db.NewReportsRepo(lgr, d) 
-	if reportRepoErr != nil {
-		return nil, reportRepoErr
-	}
-
-	dvRepo, deviceRepoErr := db.NewDevicesRepo(lgr, d)
-	if deviceRepoErr != nil {
-		return nil, deviceRepoErr
+	uow := db.NewUnitOfWork(d)
+	if uow == nil {
+		return nil, errors.New("커스텀 에러")
 	}
 
 	// 0. 서비스 레이어 획득
-	rpService := service.NewUserService(rpRepo, dvRepo)
+	rpService := service.NewUserService(uow)
 	if rpService == nil {
 		return nil, errors.New("커스텀 에러")
 	}
 
-	dvService := service.NewDeviceService(dvRepo)
+	dvService := service.NewDeviceService(uow)
 	if dvService == nil {
 		return nil, errors.New("커스텀 에러")
 	}

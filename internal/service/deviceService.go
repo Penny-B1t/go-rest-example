@@ -18,54 +18,58 @@ type IDeviceService interface {
 
 // 실제 구현체
 type DeviceService struct {
-	dsRepo db.DevicesDataService
+	// UoW 객체 할당 
+	uow db.IUnitOfWork
 }
 
 // 팩토리 함수
-func NewDeviceService(dsRepo db.DevicesDataService) IDeviceService {
+func NewDeviceService(uow db.IUnitOfWork) IDeviceService {
 	return &DeviceService{
-		dsRepo: dsRepo,
+		uow: uow,
 	}
 }
 
 // Create handles POST /device.
 func(d *DeviceService) Create(c *gin.Context, deviceReq external.DeviceReq) error {
 
-	// 2. DB 중복 객체 존재 여부 확인
-	findDevice, err := d.dsRepo.GetByID(c, deviceReq.ProductNumber)
-	if err != nil || findDevice != nil {
-		// 상위 레이어에게 전달
-		return err
-	}
+	return d.uow.Execute(func(work db.IUnitOfWork) error {
 
-	// 3. 객체 생성을 위한 도메인 엔티티 생성
-	newDevice := data.Device{
-		InternalID 	  : 1, 
-		ProductNumber : deviceReq.ProductNumber,
-		MacAddress    : deviceReq.MacAddress,
-		FirmwareVersion : deviceReq.FirmwareVersion,  
-		LastSeenAt    : time.Now(),
-		CreatedAt     : time.Now(),
-		ReTry         : 0,
-		UpdateCheck   : 0,
-		Status        : data.StatusReady,
-	}
+		// 2. DB 중복 객체 존재 여부 확인
+		findDevice, err := work.Device().GetByID(c, deviceReq.ProductNumber)
+		if err != nil || findDevice != nil {
+			// 상위 레이어에게 전달
+			return err
+		}
 
-	_, err = d.dsRepo.Create(c, &newDevice)
-	if err != nil {
-		// 상위 레이어에게 전달
-		return err
-	}
+		// 3. 객체 생성을 위한 도메인 엔티티 생성
+		newDevice := data.Device{
+			InternalID 	  : 1, 
+			ProductNumber : deviceReq.ProductNumber,
+			MacAddress    : deviceReq.MacAddress,
+			FirmwareVersion : deviceReq.FirmwareVersion,  
+			LastSeenAt    : time.Now(),
+			CreatedAt     : time.Now(),
+			ReTry         : 0,
+			UpdateCheck   : 0,
+			Status        : data.StatusReady,
+		}
 
-	// TODO 4. 실제로 생성되었는지 검사
+		_, err = work.Device().Create(c, &newDevice)
+		if err != nil {
+			// 상위 레이어에게 전달
+			return err
+		}
 
-	return nil
+		// TODO 4. 실제로 생성되었는지 검사
+
+		return nil
+	})
 }
 
 // Select handles GET /device.
 func(d *DeviceService) GetAll(c *gin.Context)(*[]data.Device, error){
 	// 0. 데이터 레이어를 통한 정보 획득 
-	devices, err := d.dsRepo.GetAll(c)
+	devices, err := d.uow.Device().GetAll(c)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +82,7 @@ func(d *DeviceService) GetAll(c *gin.Context)(*[]data.Device, error){
 func(d *DeviceService) GetByID(c *gin.Context, ID string)(*data.Device, error){
 
 	// 1. 데이터 레이어를 통한 정보 획득 
-	findDevice, err := d.dsRepo.GetByID(c, ID)
+	findDevice, err := d.uow.Device().GetByID(c, ID)
 	if err != nil {
 		// 커스텀 에러 선언 필요 
 		return nil, err

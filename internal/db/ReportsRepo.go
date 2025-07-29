@@ -40,14 +40,11 @@ type ReportsRepo struct {
 	logger     *logger.AppLogger
 }
 
-func NewReportsRepo(lgr *logger.AppLogger, db DBTX) (*ReportsRepo, error) {
-	if lgr == nil || db == nil {
-		return nil, ErrInvalidReportRequired
-	}
+func NewReportsRepo(lgr *logger.AppLogger, db DBTX) *ReportsRepo {
 	return &ReportsRepo{
 		connection: db,
 		logger:     lgr,
-	}, nil
+	}
 }
 
 // 주기보고 정보 row 생성

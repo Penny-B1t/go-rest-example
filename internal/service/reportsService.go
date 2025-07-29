@@ -19,22 +19,20 @@ type IReportService interface {
 
 // 실제 구현체
 type ReportService struct {
-	rpRepo db.ReportsDataService
-	dsRepo db.DevicesDataService
+	uow db.IUnitOfWork
 }
 
 // 팩토리 함수
-func NewUserService(rpRepo db.ReportsDataService, dsRepo db.DevicesDataService) IReportService {
+func NewUserService(uow db.IUnitOfWork) IReportService {
 	return &ReportService{
-		rpRepo: rpRepo,
-		dsRepo: dsRepo,
+		uow: uow,
 	}
 }
 
-func(d *ReportService) Report(c *gin.Context, reportReq external.ReportReq) ( *external.DeviceUpdate, error){
+func(d *ReportService) Report(c *gin.Context, reportReq external.ReportReq) (*external.DeviceUpdate, error){
 
 	// 2. 디바이스 존재 여부 검증 : 선언 필요
-	findDevice, err := d.dsRepo.GetByID(c, reportReq.ProductNumber)
+	findDevice, err := d.uow.Device().GetByID(c, reportReq.ProductNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +52,7 @@ func(d *ReportService) Report(c *gin.Context, reportReq external.ReportReq) ( *e
 	}
 
 	// 4. repo 호출을 통한 업데이트 진행 
-	_, err = d.rpRepo.Create(c, &report)
+	_, err = d.uow.Report().Create(c, &report)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +83,7 @@ func(d *ReportService) Report(c *gin.Context, reportReq external.ReportReq) ( *e
 // Select handles GET /report/update
 func(d *ReportService) Update(c *gin.Context, ID string) (string, error) {
 
-	findDevice, err := d.dsRepo.GetByID(c,ID)
+	findDevice, err := d.uow.Device().GetByID(c,ID)
 	if err != nil {
 		return "", err
 	}

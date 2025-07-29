@@ -11,25 +11,34 @@ import (
 	_ "github.com/go-sql-driver/mysql" // 데이터베이스 드라이버 구현체 추가
 )
 
-// --- 새로 추가된 인터페이스들 ---
-
-// DBTX는 데이터베이스 쿼리 실행기(sql.DB 또는 sql.Tx)에 대한 인터페이스입니다.
-// Repository 레이어가 이 인터페이스에 의존하게 하여 테스트 용이성을 높입니다.
+/*
+  @breif  데이터베이스 쿼리 실행기(sql.DB 또는 sql.Tx)에 대한 인터페이스
+          Repository 레이어가 이 인터페이스에 의존하게 하여 테스트 용이성을 높입니다.
+*/
 type DBTX interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
 }
 
-// DBManager는 데이터베이스 연결의 생명주기를 관리하는 인터페이스입니다.
+/*
+  @breif  데이터베이스 연결의 생명주기를 관리하는 인터페이스
+  @return DB		 connection  정보 획득
+  @return Ping		 연결 상태 확인 
+  @return Disconnect 연결 제거 
+*/
 type DBManager interface {
-	DB() DBTX // DB 또는 Tx를 나타내는 DBTX 인터페이스 반환
+	DB() *sql.DB
 	Ping() error
 	Disconnect() error
 }
 
-// --- 기존 코드 (일부 수정) ---
-
+/*
+  @breif  연결 정보 구조체 
+  @return DB
+  @return Ping
+  @return Disconnect
+*/
 type MariaDBCredentials struct {
 	User     string
 	Password string
@@ -37,6 +46,7 @@ type MariaDBCredentials struct {
 	Port     int
 	Database string
 }
+
 
 type MariaDBManager struct {
 	db     *sql.DB
@@ -90,7 +100,7 @@ func NewMariaDBManager(creds *MariaDBCredentials, lgr *logger.AppLogger) (DBMana
 }
 
 // DB - DBTX 인터페이스를 반환합니다. *sql.DB는 DBTX를 구현하므로 그대로 반환할 수 있습니다.
-func (m *MariaDBManager) DB() DBTX {
+func (m *MariaDBManager) DB() *sql.DB {
 	return m.db
 }
 

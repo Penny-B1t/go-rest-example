@@ -37,14 +37,12 @@ type DevicesRepo struct {
 	logger     *logger.AppLogger
 }
 
-func NewDevicesRepo(lgr *logger.AppLogger, db DBTX) (*DevicesRepo, error) {
-	if lgr == nil || db == nil {
-		return nil, ErrInvalidReportRequired
-	}
+func NewDevicesRepo(lgr *logger.AppLogger, db DBTX) *DevicesRepo {
+
 	return &DevicesRepo{
 		connection: db,
 		logger:     lgr,
-	}, nil
+	}
 }
 
 func (d *DevicesRepo) Create(ctx context.Context, di *data.Device)(string, error){
