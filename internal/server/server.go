@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"io"
 	"sync"
 
@@ -12,6 +13,7 @@ import (
 	"go-rest-example/internal/logger"
 	"go-rest-example/internal/middleware"
 	"go-rest-example/internal/model"
+	"go-rest-example/internal/service"
 	"go-rest-example/internal/util"
 )
 
@@ -80,7 +82,6 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 	// pprof.RouteRegister(internalAPIGrp, "pprof")
 	// router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-
 	// 0. 데이터 레이어 획득 
 	d := dbMgr.DB()
 	rpRepo, reportRepoErr := db.NewReportsRepo(lgr, d) 
@@ -93,7 +94,18 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 		return nil, deviceRepoErr
 	}
 
-	deviceHandler, deviceHandlerErr := handlers.NewDevicesHandler(lgr, dvRepo)
+	// 0. 서비스 레이어 획득
+	rpService := service.NewUserService(rpRepo, dvRepo)
+	if rpService == nil {
+		return nil, errors.New("커스텀 에러")
+	}
+
+	dvService := service.NewDeviceService(dvRepo)
+	if dvService == nil {
+		return nil, errors.New("커스텀 에러")
+	}
+
+	deviceHandler, deviceHandlerErr := handlers.NewDevicesHandler(lgr, dvService)
 	if deviceHandlerErr != nil {
 		return nil, deviceHandlerErr
 	}
@@ -106,7 +118,7 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 	deviceAPIGrp.GET("/:ID",deviceHandler.GetByID)
 
 	// repot API 등록 
-	reportHandler, reportHandlerErr := handlers.NewReportsHandler(lgr, rpRepo, dvRepo)
+	reportHandler, reportHandlerErr := handlers.NewReportsHandler(lgr, rpService)
 	if reportHandlerErr != nil {
 		return nil, reportHandlerErr
 	}
