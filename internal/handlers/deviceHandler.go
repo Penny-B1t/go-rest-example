@@ -46,7 +46,6 @@ func(d *DevicesHandler) Create(c *gin.Context){
 		return 
 	}
 
-	// 2. DB 중복 객체 존재 여부 확인
 	err = d.dService.Create(c, deviceReq)
 	if err != nil{
 		// 커스텀 에러 선언 필요 
@@ -75,7 +74,7 @@ func(d *DevicesHandler) GetByID(c *gin.Context){
 	i := c.Query("ID") 
 
 	// 1. 데이터 레이어를 통한 정보 획득 
-	findDevice, err := d.dService.GetByID(c, i)
+	findDevice, err := d.dService.GetByProductNumber(c,i)
 	if err != nil {
 		// 커스텀 에러 선언 필요 
 		return

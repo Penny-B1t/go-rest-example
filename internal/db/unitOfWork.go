@@ -1,8 +1,10 @@
 package db
 
 import (
-	"database/sql"
+	"context"
 	"go-rest-example/internal/logger"
+
+	"github.com/jmoiron/sqlx"
 )
 
 /*
@@ -13,7 +15,7 @@ import (
 type IUnitOfWork interface {
 	Device() DevicesDataService
 	Report() ReportsDataService
-	Execute(fn func(IUnitOfWork)error)error
+	Execute(ctx context.Context, fn func(IUnitOfWork)error)error
 	Cleanup()
 }
 
@@ -21,8 +23,8 @@ type IUnitOfWork interface {
   @breif IUnitOfWork를 상속 받은 구현체
 */
 type unitOfWork struct {
-	db *sql.DB
-	tx *sql.Tx
+	db *sqlx.DB
+	tx *sqlx.Tx
 	logger *logger.AppLogger
 }
 
@@ -31,7 +33,7 @@ type unitOfWork struct {
   @param  db          쿼리 실행기
   @return IUnitOfWork 
 */
-func NewUnitOfWork(db *sql.DB) IUnitOfWork {
+func NewUnitOfWork(db *sqlx.DB) IUnitOfWork {
 	return &unitOfWork{db: db}
 }
 
@@ -68,7 +70,7 @@ func (u *unitOfWork) Report() ReportsDataService {
          생성과 업데이트와 같은 yt
   @param fn    고차함수 
 */
-func (u *unitOfWork) Execute(fn func(IUnitOfWork)error)error{
+func (u *unitOfWork) Execute(ctx context.Context, fn func(IUnitOfWork)error)error{
 
 	// 1. 트랜젝션 실행
 	tx, err := u.db.Begin()
@@ -77,7 +79,8 @@ func (u *unitOfWork) Execute(fn func(IUnitOfWork)error)error{
 	}
 
 	// 구조체 필드 할당
-	u.tx = tx
+	sqlxTx := &sqlx.Tx{Tx: tx}
+	u.tx = sqlxTx
 
 	// 2. 고차함수를 통해 내용 실행
 	err = fn(u)

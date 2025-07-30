@@ -48,7 +48,7 @@ func(d *ReportsHandler) Report(c *gin.Context){
 		return 
 	}
 
-	reportRes, err := d.rpService.Report(c, reportReq)
+	reportRes, err := d.rpService.DeviceReport(c, reportReq)
 	if err != nil {
 		//  커스텀 에러 선언 
 		return
@@ -65,7 +65,7 @@ func(d *ReportsHandler) Update(c *gin.Context){
 	// 0. 쿼리 파라미터 획득 
 	i := c.Query("ProductNumber")
 
-	path, err := d.rpService.Update(c, i)
+	path, err := d.rpService.CheckForUpdate(c, i)
 	if err != nil {
 		return 
 	}

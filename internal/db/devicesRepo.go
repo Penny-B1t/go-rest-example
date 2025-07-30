@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"go-rest-example/internal/logger"
@@ -24,10 +23,10 @@ var (
 // DeviceRepo를 통해 사용할 메서드를 제약하고 규정하기 위한 인터페이스 
 // 입력 타입 및 반환 타입 수정 필요 
 type DevicesDataService interface {
-	Create(ctx context.Context, di *data.Device) (string, error) 
+	Create(ctx context.Context, di *data.Device) (int64, error) 
 	GetAll(ctx context.Context) (*[]data.Device, error)
-	GetByID(ctx context.Context, ID string) (*data.Device, error)
-	update(ctx context.Context, ID string, parmas *external.UpdateDeviceParams) error
+	GetByProductNumber(ctx context.Context, ID string) (*data.Device, error)
+	Update(ctx context.Context, ID string, parmas *external.UpdateDeviceParams) error
 	Delete(ctx context.Context, ID string) error
 }
 
@@ -45,109 +44,71 @@ func NewDevicesRepo(lgr *logger.AppLogger, db DBTX) *DevicesRepo {
 	}
 }
 
-func (d *DevicesRepo) Create(ctx context.Context, di *data.Device)(string, error){
-	// 쿼리문 생성
-	query := "INSERT INTO devices " +
-	"( ProductNumber, MacAddress, FirmwareVersion, LastSeenAt, CreatedAt, ReTry, UpdateCheck, Status)" +
-	"VALUES ( ?, ?, ?, ?, ?, ?, ?, ?)"
+// 커스텀 에러처리 완료 
+func (d *DevicesRepo) Create(ctx context.Context, device *data.Device)(int64, error){
+	
+	query := `
+		INSERT INTO devices (ProductNumber, MacAddress, FirmwareVersion, LastSeenAt, CreatedAt, ReTry, UpdateCheck, Status)
+		VALUES (?, ?, ?, ?, ?, 0, 0, ?)`
 
-	// 쿼리문 실행
-	result, err := d.connection.ExecContext(
-		ctx, 
-		query, 
-		di.ProductNumber,
-		di.MacAddress,
-		di.FirmwareVersion,
-		di.LastSeenAt,
-		di.CreatedAt,
-		0,
-		0,
-		data.ReportPowerOn,
-	)
+	// Use standard ExecContext with positional parameters
+	result, err := d.connection.ExecContext(ctx, query, 
+		device.ProductNumber, 
+		device.MacAddress, 
+		device.FirmwareVersion, 
+		device.LastSeenAt, 
+		device.CreatedAt, 
+		device.Status)
 
 	if err != nil {
-		d.logger.Error().Err(err).Msg("failed to create devices")
-		return "", ErrFailedToCreateDevice
+		d.logger.Error().Err(err).Msg("[deviceRepo] failed to create device with sqlx")
+		return 0, ErrFailedToCreateDevice
 	}
 
 	lastID, err := result.LastInsertId()
 	if err != nil {
-		return "", ErrFailedToCreateDevice
+		d.logger.Error().Err(err).Msg("[deviceRepo] non create device with sqlx")
+		return 0, ErrFailedToCreateDevice
 	}
 
-	return strconv.FormatInt(lastID, 10), nil
+	return lastID, nil
 }
 
 func (d *DevicesRepo) GetAll(ctx context.Context) (*[]data.Device, error){
-	query := "SELECT InternalID, ProductNumber, MacAddress, FirmwareVersion, LastSeenAt, CreatedAt, ReTry, UpdateCheck, Status from devices"
 
-	rows, err := d.connection.QueryContext(ctx, query)
+	query := `
+	SELECT InternalID, ProductNumber, MacAddress, FirmwareVersion, LastSeenAt, CreatedAt, ReTry, UpdateCheck, Status
+	FROM devices`
+
+	var devices []data.Device
+
+	err := d.connection.SelectContext(ctx, &devices, query)
+
 	if err != nil {
-		d.logger.Error().Err(err).Msg("failed to select device_info")
-		return nil, ErrFailedToSelectReportInfo
+		return nil, errors.New("커스텀 에러")
 	}
 
-	defer rows.Close()
-
-	var responseData []data.Device
-
-	for rows.Next() {
-		var device data.Device
-
-		err := rows.Scan(
-			&device.InternalID,
-			&device.ProductNumber,
-			&device.MacAddress,
-			&device.FirmwareVersion,
-			&device.LastSeenAt,
-			&device.CreatedAt,
-			&device.ReTry,
-			&device.UpdateCheck,
-			&device.Status,
-		)
-
-		if err != nil {
-			d.logger.Error().Err(err).Msg("failed to scan row")
-			return nil, err
-		}
-		
-		responseData = append(responseData, device)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return &responseData, nil
+	return &devices, nil
 }
 
-func (d *DevicesRepo) GetByID(ctx context.Context, productNumber string) (*data.Device, error){
-	//
-	query := "SELECT InternalID, ProductNumber, MacAddress, FirmwareVersion, LastSeenAt, CreatedAt, ReTry, UpdateCheck, Status from devices WHERE ProductNumber = ?"
-
-	row := d.connection.QueryRowContext(ctx, query, productNumber)
-
+func (d *DevicesRepo) GetByProductNumber(ctx context.Context, productNumber string) (*data.Device, error){
 	var device data.Device
-	err := row.Scan(
-		&device.InternalID,
-		&device.ProductNumber,
-		&device.MacAddress,
-		&device.FirmwareVersion,
-		&device.LastSeenAt,
-		&device.CreatedAt,
-		&device.ReTry,
-		&device.UpdateCheck,
-		&device.Status,
-	)
 
-	 if err != nil {
+	query := `
+		SELECT InternalID, ProductNumber, MacAddress, FirmwareVersion, LastSeenAt, CreatedAt, ReTry, UpdateCheck, Status
+		FROM devices WHERE ProductNumber = ?`
+
+	err := d.connection.GetContext(ctx, &device, query, productNumber)
+
+	if err != nil {
+		d.logger.Error().Err(err).Msg("[deviceRepo] failed to select device with sqlx")
 		return nil, ErrFailedToSelectDevice
-	 }
+	}
 
 	 return &device, nil
 }
 
-func (d *DevicesRepo) update(ctx context.Context, ID string, parmas *external.UpdateDeviceParams) error{
+func (d *DevicesRepo) Update(ctx context.Context, productNumber string, parmas *external.UpdateDeviceParams) error{
 
 	query, args := d.GenerateUpdateQuery(parmas)
 	if query == "" || args == nil {
@@ -155,40 +116,37 @@ func (d *DevicesRepo) update(ctx context.Context, ID string, parmas *external.Up
 	}
 
 	// 식별자 추가 
-	args = append(args, ID)
+	args = append(args, productNumber)
 
 	// 5. 쿼리 실행
-    result, err := d.connection.ExecContext(ctx, query, args...)
+    result, err := d.connection.ExecContext(ctx,query, args...)
     if err != nil {
-        d.logger.Error().Err(err).Msg("failed to update device")
+        d.logger.Error().Err(err).Msg("[deviceRepo] failed to update device")
         return ErrFailedToUpdateDevice
     }
 
-	 // 6. 실제로 변경이 일어났는지 확인 (선택적)
-	 rowsAffected, err := result.RowsAffected()
-	 if err != nil {
-		 return ErrFailedToUpdateDevice
-	 }
-
-	 if rowsAffected == 0 {
-		 return ErrNothingAffrectedDevice
-	 }
+	// 6. 실제로 변경이 일어났는지 확인 
+	rowsAffected, err := result.RowsAffected()
+	if err != nil || rowsAffected == 0 {
+		d.logger.Error().Err(err).Msg("[deviceRepo] non update device")
+		return ErrFailedToUpdateDevice
+	}
 
 	return nil
 }
 
 func (d *DevicesRepo) Delete(ctx context.Context, productNumber string)  error {
-	query := "DELETE FROM devices WHERE ProductNumber = ? "
+	query := "DELETE FROM devices WHERE ProductNumber = ?"
 
 	result, err := d.connection.ExecContext(ctx, query, productNumber)
 	if err != nil {
-		d.logger.Error().Err(err).Msg("failed to delete devices")
+		d.logger.Error().Err(err).Msg("[deviceRepo] failed to delete devices")
 		return ErrFailedToDeleteDevice
 	}
 
 	_, err = result.RowsAffected()
 	if err != nil {
-		d.logger.Error().Err(err).Msg("nothing affected")
+		d.logger.Error().Err(err).Msg("[deviceRepo] non Delete device)")
 		return ErrNothingAffrectedDevice
 	}
 

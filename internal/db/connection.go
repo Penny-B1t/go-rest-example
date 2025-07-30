@@ -8,36 +8,47 @@ import (
 	"go-rest-example/internal/logger"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql" // 데이터베이스 드라이버 구현체 추가
+	_ "github.com/go-sql-driver/mysql" // MySQL 드라이버는 그대로 사용합니다.
+	"github.com/jmoiron/sqlx"          // sqlx 임포트 추가
 )
 
 /*
-  @breif  데이터베이스 쿼리 실행기(sql.DB 또는 sql.Tx)에 대한 인터페이스
-          Repository 레이어가 이 인터페이스에 의존하게 하여 테스트 용이성을 높입니다.
+ @brief  데이터베이스 쿼리 실행기(sqlx.DB 또는 sqlx.Tx)에 대한 인터페이스
+         sqlx의 *sqlx.DB와 *sqlx.Tx는 이 인터페이스를 모두 구현합니다.
 */
 type DBTX interface {
+	// --- 표준 `database/sql` 호환 메서드 ---
+
+	// Context 사용 버전
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+
+	// --- `sqlx`의 핵심 편의 기능 (구조체 스캔) ---
+
+	// Context 사용 버전
+	GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+	SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+
+	// --- `sqlx`의 명명된 쿼리(Named Query) 지원 ---
+
+	// Context 사용 버전
+	NamedExecContext(ctx context.Context, query string, arg interface{}) (sql.Result, error)
+	QueryRowxContext(ctx context.Context, query string, args ...interface{}) *sqlx.Row
 }
 
 /*
-  @breif  데이터베이스 연결의 생명주기를 관리하는 인터페이스
-  @return DB		 connection  정보 획득
-  @return Ping		 연결 상태 확인 
-  @return Disconnect 연결 제거 
+ @brief  데이터베이스 연결의 생명주기를 관리하는 인터페이스
 */
 type DBManager interface {
-	DB() *sql.DB
+	// DB() 메서드가 이제 *sqlx.DB를 반환합니다.
+	DB() *sqlx.DB
 	Ping() error
 	Disconnect() error
 }
 
 /*
-  @breif  연결 정보 구조체 
-  @return DB
-  @return Ping
-  @return Disconnect
+ @brief  연결 정보 구조체 (변경 없음)
 */
 type MariaDBCredentials struct {
 	User     string
@@ -47,9 +58,9 @@ type MariaDBCredentials struct {
 	Database string
 }
 
-
 type MariaDBManager struct {
-	db     *sql.DB
+	// db 필드를 *sql.DB에서 *sqlx.DB로 변경합니다.
+	db     *sqlx.DB
 	logger *logger.AppLogger
 }
 
@@ -65,7 +76,7 @@ var (
 )
 
 func NewMariaDBManager(creds *MariaDBCredentials, lgr *logger.AppLogger) (DBManager, error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true", // parseTime=true 추가 권장
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true",
 		creds.User,
 		creds.Password,
 		creds.Host,
@@ -73,34 +84,28 @@ func NewMariaDBManager(creds *MariaDBCredentials, lgr *logger.AppLogger) (DBMana
 		creds.Database,
 	)
 
-	lgr.Info().Str("connURL", MaskConnectionDSN(creds)).Msg("connecting to MariaDB")
+	lgr.Info().Str("connURL", MaskConnectionDSN(creds)).Msg("connecting to MariaDB with sqlx")
 
-	db, err := sql.Open("mysql", dsn)
+	db, err := sqlx.Connect("mysql", dsn)
 	if err != nil {
-		lgr.Error().Err(err).Msg("failed to prepare DB connection")
-		return nil, ErrClientInit
-	}
-
-	mgr := &MariaDBManager{
-		db:     db,
-		logger: lgr,
-	}
-
-	if err := mgr.Ping(); err != nil {
-		// Ping 실패 시 생성된 db 객체를 닫아주는 것이 좋습니다.
-		db.Close()
-		return nil, err
+		lgr.Error().Err(err).Msg("failed to connect or ping DB with sqlx")
+		return nil, ErrConnectionEstablish
 	}
 
 	db.SetConnMaxLifetime(time.Minute * 3)
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(10)
 
+	mgr := &MariaDBManager{
+		db:     db,
+		logger: lgr,
+	}
+
 	return mgr, nil
 }
 
-// DB - DBTX 인터페이스를 반환합니다. *sql.DB는 DBTX를 구현하므로 그대로 반환할 수 있습니다.
-func (m *MariaDBManager) DB() *sql.DB {
+// DB - 이제 *sqlx.DB를 반환합니다.
+func (m *MariaDBManager) DB() *sqlx.DB {
 	return m.db
 }
 
@@ -112,6 +117,8 @@ func (m *MariaDBManager) Disconnect() error {
 func (m *MariaDBManager) Ping() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	// sqlx.DB도 PingContext를 지원합니다.
 	if err := m.db.PingContext(ctx); err != nil {
 		m.logger.Error().Err(err).Msg("failed to ping DB")
 		return ErrPingDB

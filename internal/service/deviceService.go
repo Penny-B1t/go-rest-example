@@ -1,19 +1,19 @@
 package service
 
 import (
+	"context"
 	"go-rest-example/internal/db"
 	"go-rest-example/internal/model/data"
 	"go-rest-example/internal/model/external"
+	"go-rest-example/internal/util"
 	"time"
-
-	"github.com/gin-gonic/gin"
 )
 
 // DeviceService 인터페이스 (의존성 역전을 위해)
 type IDeviceService interface {
-	Create(c *gin.Context, deviceReq external.DeviceReq) error 
-	GetAll(c *gin.Context)(*[]data.Device, error)
-	GetByID(c *gin.Context, ID string)(*data.Device, error)
+	Create(parentCtx context.Context, deviceReq external.DeviceReq) error 
+	GetAll(parentCtx context.Context)(*[]data.Device, error)
+	GetByProductNumber(parentCtx context.Context, ProductNumber string)(*data.Device, error)
 }
 
 // 실제 구현체
@@ -30,12 +30,15 @@ func NewDeviceService(uow db.IUnitOfWork) IDeviceService {
 }
 
 // Create handles POST /device.
-func(d *DeviceService) Create(c *gin.Context, deviceReq external.DeviceReq) error {
+func (d *DeviceService) Create(parentCtx context.Context, deviceReq external.DeviceReq) error {
 
-	return d.uow.Execute(func(work db.IUnitOfWork) error {
+	ctx, cancel := context.WithTimeout(parentCtx, util.DefaultServiceTimeout)
+	defer cancel()
+
+	return d.uow.Execute(ctx, func(work db.IUnitOfWork) error {
 
 		// 2. DB 중복 객체 존재 여부 확인
-		findDevice, err := work.Device().GetByID(c, deviceReq.ProductNumber)
+		findDevice, err := work.Device().GetByProductNumber(ctx, deviceReq.ProductNumber)
 		if err != nil || findDevice != nil {
 			// 상위 레이어에게 전달
 			return err
@@ -54,22 +57,25 @@ func(d *DeviceService) Create(c *gin.Context, deviceReq external.DeviceReq) erro
 			Status        : data.StatusReady,
 		}
 
-		_, err = work.Device().Create(c, &newDevice)
+		_, err = work.Device().Create(ctx, &newDevice)
 		if err != nil {
 			// 상위 레이어에게 전달
 			return err
 		}
-
-		// TODO 4. 실제로 생성되었는지 검사
 
 		return nil
 	})
 }
 
 // Select handles GET /device.
-func(d *DeviceService) GetAll(c *gin.Context)(*[]data.Device, error){
+func(d *DeviceService) GetAll(parentCtx context.Context)(*[]data.Device, error){
+
+
+	ctx, cancel := context.WithTimeout(parentCtx, util.DefaultServiceTimeout)
+	defer cancel()
+
 	// 0. 데이터 레이어를 통한 정보 획득 
-	devices, err := d.uow.Device().GetAll(c)
+	devices, err := d.uow.Device().GetAll(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -79,10 +85,13 @@ func(d *DeviceService) GetAll(c *gin.Context)(*[]data.Device, error){
 }
 
 // Select handles GET /device/ID=.
-func(d *DeviceService) GetByID(c *gin.Context, ID string)(*data.Device, error){
+func(d *DeviceService) GetByProductNumber(parentCtx context.Context, ProductNumber string)(*data.Device, error){
+
+	ctx, cancel := context.WithTimeout(parentCtx, util.DefaultServiceTimeout)
+	defer cancel()
 
 	// 1. 데이터 레이어를 통한 정보 획득 
-	findDevice, err := d.uow.Device().GetByID(c, ID)
+	findDevice, err := d.uow.Device().GetByProductNumber(ctx, ProductNumber)
 	if err != nil {
 		// 커스텀 에러 선언 필요 
 		return nil, err
