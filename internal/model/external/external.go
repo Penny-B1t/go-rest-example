@@ -51,14 +51,6 @@ func (d *DeviceReq)Validate() error{
 	if !result {
 		return errors.New("커스텀 에러")
 	}
-	
-	// 버전 문자열 형식 검사 
-	re = regexp.MustCompile(`(?i)[0-9]+\.\d\d\.\d\d`)
-	result = re.MatchString(d.FirmwareVersion)
-	if !result {
-		return errors.New("커스텀 에러")
-	}
-
 
 	return nil
 }
@@ -83,12 +75,12 @@ func(r *ReportReq)Validate() error {
     }
 
 	// 국내 위도 범위 검증
-	if r.Lat < 33 || r.Lat > 34 {
+	if r.Lat <= 33 || r.Lat >= 34 {
         return errors.New("latitude must be between 33 and 34")
     }
 
 	// 국내 위도 범위 검증 
-	if r.Lon < 124 || r.Lon > 132 {
+	if r.Lon <= 124 || r.Lon >= 132 {
         return errors.New("longitude must be between 124 and 132")
     }
 

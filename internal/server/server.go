@@ -113,7 +113,7 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 
 	// 0. 데이터 레이어 획득 
 	d := dbMgr.DB()
-	uow := db.NewUnitOfWork(d)
+	uow := db.NewUnitOfWork(d, lgr)
 	if uow == nil {
 		return nil, errors.New("커스텀 에러")
 	}

@@ -46,19 +46,24 @@ func NewDevicesRepo(lgr *logger.AppLogger, db DBTX) *DevicesRepo {
 
 // 커스텀 에러처리 완료 
 func (d *DevicesRepo) Create(ctx context.Context, device *data.Device)(int64, error){
+
+	d.logger.Info().Msg("call create")
 	
 	query := `
-		INSERT INTO devices (ProductNumber, MacAddress, FirmwareVersion, LastSeenAt, CreatedAt, ReTry, UpdateCheck, Status)
-		VALUES (?, ?, ?, ?, ?, 0, 0, ?)`
+        INSERT INTO devices (ProductNumber, MacAddress, FirmwareVersion, LastSeenAt, CreatedAt, ReTry, UpdateCheck, Status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)` // 플레이스홀더(?)도 8개로 수정
 
-	// Use standard ExecContext with positional parameters
-	result, err := d.connection.ExecContext(ctx, query, 
-		device.ProductNumber, 
-		device.MacAddress, 
-		device.FirmwareVersion, 
-		device.LastSeenAt, 
-		device.CreatedAt, 
-		device.Status)
+    // ReTry와 UpdateCheck에 0을 명시적으로 전달합니다.
+    result, err := d.connection.ExecContext(ctx, query,
+        device.ProductNumber,
+        device.MacAddress,
+        device.FirmwareVersion,
+        device.LastSeenAt,
+        device.CreatedAt,
+        0, 
+        0,
+        device.Status,
+    )
 
 	if err != nil {
 		d.logger.Error().Err(err).Msg("[deviceRepo] failed to create device with sqlx")
@@ -66,6 +71,8 @@ func (d *DevicesRepo) Create(ctx context.Context, device *data.Device)(int64, er
 	}
 
 	lastID, err := result.LastInsertId()
+
+	d.logger.Info().Int64("테스트",lastID)
 	if err != nil {
 		d.logger.Error().Err(err).Msg("[deviceRepo] non create device with sqlx")
 		return 0, ErrFailedToCreateDevice

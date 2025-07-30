@@ -33,8 +33,11 @@ type unitOfWork struct {
   @param  db          쿼리 실행기
   @return IUnitOfWork 
 */
-func NewUnitOfWork(db *sqlx.DB) IUnitOfWork {
-	return &unitOfWork{db: db}
+func NewUnitOfWork(db *sqlx.DB, lgr *logger.AppLogger) IUnitOfWork {
+	return &unitOfWork{
+		db: db,
+		logger: lgr,
+	}
 }
 
 /*
@@ -73,14 +76,13 @@ func (u *unitOfWork) Report() ReportsDataService {
 func (u *unitOfWork) Execute(ctx context.Context, fn func(IUnitOfWork)error)error{
 
 	// 1. 트랜젝션 실행
-	tx, err := u.db.Begin()
+	tx, err := u.db.Beginx()
 	if err != nil {
 		return err
 	}
 
 	// 구조체 필드 할당
-	sqlxTx := &sqlx.Tx{Tx: tx}
-	u.tx = sqlxTx
+	u.tx = tx
 
 	// 2. 고차함수를 통해 내용 실행
 	err = fn(u)

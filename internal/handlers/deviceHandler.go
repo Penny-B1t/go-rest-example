@@ -42,13 +42,13 @@ func(d *DevicesHandler) Create(c *gin.Context){
 	// 1. 객체 유효성 검사 
 	err = deviceReq.Validate()
 	if err != nil {
-		// 커스텀 에러 선언 필요 
+		d.logger.Error().Err(err).Msg("커스텀")
 		return 
 	}
 
 	err = d.dService.Create(c, deviceReq)
 	if err != nil{
-		// 커스텀 에러 선언 필요 
+		d.logger.Error().Err(err).Msg("커스텀")
 		return 
 	}
 
@@ -79,6 +79,8 @@ func(d *DevicesHandler) GetByID(c *gin.Context){
 		// 커스텀 에러 선언 필요 
 		return
 	}
+
+
 
 	// 2. 정보 반환
 	c.JSON(http.StatusCreated, findDevice)
