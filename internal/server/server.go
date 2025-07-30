@@ -1,9 +1,12 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"io"
+	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
@@ -21,23 +24,49 @@ import (
 var startOnce sync.Once
 
 
-func Start(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManager) error {
+func Start(ctx context.Context, svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManager) error {
+	// 1. Gin 라우터 설정 (이전과 동일)
+	router, err := WebRouter(svcEnv, lgr, dbMgr)
+	if err != nil {
+		return err
+	}
+	lgr.Info().Msg("Registered routes")
+	for _, item := range router.Routes() {
+		lgr.Info().Str("method", item.Method).Str("path", item.Path).Send()
+	}
 
-	var err error
-	var r *gin.Engine
+	// 2. 표준 http.Server 생성 및 설정
+	srv := &http.Server{
+		Addr:    ":" + svcEnv.Port,
+		Handler: router,
+	}
 
-	// 초기화 로직을 한번만 실행하기 위해 사용
-	startOnce.Do(func() {
-		r, err = WebRouter(svcEnv, lgr, dbMgr)
-		lgr.Info().Msg("Registered routes")
-		for _, item := range r.Routes() {
-			lgr.Info().Str("method", item.Method).Str("path", item.Path).Send()
+	// 3. 별도의 고루틴에서 서버 종료 신호를 감지
+	go func() {
+		// main의 context가 Done 되면(종료 신호 수신 시) Shutdown을 호출
+		<-ctx.Done()
+		lgr.Info().Msg("Shutdown signal received, starting graceful shutdown")
+
+		// Shutdown을 위한 별도의 타임아웃 컨텍스트 생성
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		// http.Server의 Shutdown 메서드를 호출하여 우아한 종료 시작
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			lgr.Error().Err(err).Msg("Server Shutdown Failed")
 		}
-		if err != nil {
-			return
-		}
-		err = r.Run(":" + svcEnv.Port)
-	})
+	}()
+
+	// 4. 서버 시작. 이 호출은 서버가 종료될 때까지 블로킹됩니다.
+	lgr.Info().Str("address", srv.Addr).Msg("Starting server")
+	err = srv.ListenAndServe()
+
+	// 5. ListenAndServe는 정상적인 Shutdown 후에는 http.ErrServerClosed 에러를 반환합니다.
+	// 이 경우는 실제 에러가 아니므로 nil을 반환하여 정상 종료를 알립니다.
+	if errors.Is(err, http.ErrServerClosed) {
+		lgr.Info().Msg("Server closed gracefully")
+		return nil
+	}
 
 	return err
 }

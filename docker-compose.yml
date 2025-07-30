@@ -1,0 +1,59 @@
+
+services:
+  # MariaDB 데이터베이스 서비스
+  mariadb:
+    image: mariadb:10.11
+    container_name: iot_mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: your_database_password
+      MYSQL_DATABASE: iot_device_db
+      MYSQL_USER: iot_user
+      MYSQL_PASSWORD: iot_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - iot_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      timeout: 10s
+      retries: 5
+      interval: 30s
+      start_period: 30s
+
+  # Go REST API 애플리케이션
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: iot_api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - enviroment=docker
+      - port=8080
+      - logLevel=info
+      - host=mariadb
+      - user=root
+      - password=your_database_password
+      - dbport=3306
+      - dbname=iot_device_db
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    networks:
+      - iot_network
+    volumes:
+      - ./firmware:/app/firmware:ro  # 펌웨어 파일용 볼륨
+
+volumes:
+  mariadb_data:
+    driver: local
+
+networks:
+  iot_network:
+    driver: bridge

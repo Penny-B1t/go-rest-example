@@ -1,20 +1,22 @@
-package gorestexample
+package main
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
-	"time"
 
 	"go-rest-example/internal/db"
 	"go-rest-example/internal/logger"
 	"go-rest-example/internal/model"
 	"go-rest-example/internal/server"
+
+	"github.com/joho/godotenv"
 )
 
 // 상수 선언언
@@ -27,6 +29,11 @@ const (
 var version string
 
 func main() {
+
+	if err := godotenv.Load(); err != nil {
+		fmt.Printf("Warning: .env file not found or could not be loaded: %v\n", err)
+	}
+	
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Service %s exited with error: %v (exit code: %d) \n",
 		 serviceName, err, exitCode(err))
@@ -35,59 +42,45 @@ func main() {
 }
 
 func run() error {
-
+	// 1. 종료 신호를 감지하는 Context 생성 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// 에러 채널을 생성하여, 치명적인 오류 수신 시 종료
-	errChan := make(chan error, 1)
-
+	// 2. 환경변수 및 의존성 설정 
 	svcenv, envErr := getEnvConfig()
 	if envErr != nil {
 		return envErr
 	}
-
-	// 로그 모듈 setup
 	lgr := logger.Setup(svcenv.LogLevel, svcenv.Name)
-	
-	//setup : database 연결
 	dbConnMgr, dbErr := setupDB(lgr, svcenv)
 	if dbErr != nil {
 		return dbErr
 	}
+	defer cleanup(lgr, dbConnMgr) 
 
-	go func(){
-		errChan <- server.Start(svcenv, lgr, dbConnMgr)
-	}()
-
+	// 3. [REFACTOR] 서버 시작 로직 간소화
 	lgr.Info().
 		Str("name", serviceName).
 		Str("environment", svcenv.Name).
-		Str("started at", time.Now().UTC().Format(time.RFC3339)).
 		Str("version", version).
 		Msg("starting the service")
 
-	// Wait until termination or a critical error
-	select {
-	case <-ctx.Done():
-		lgr.Info().Msg("graceful shutdown signal received")
-		err := <-errChan // wait for go routines to exit
-		cleanup(lgr, dbConnMgr)
-		return err
-	case err := <-errChan:
-		lgr.Error().Err(err).Msg("something went wrong")
-		cleanup(lgr, dbConnMgr)
+	if err := server.Start(ctx, svcenv, lgr, dbConnMgr); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		lgr.Error().Err(err).Msg("server failed to start")
 		return err
 	}
-	
+
+	lgr.Info().Msg("service stopped")
+	return nil
 }
+	
 
 // .env 파일을 읽어 시스템 동작에 사용한다.
 // builder 패턴을 사용하여 환경 변수 객체의 주소값을 반환한다.
 func getEnvConfig() (*model.ServiceEnv, error) {
 	// 작업 환경 구분
 	// 기본값 local
-	envName := os.Getenv("enviroment") // 오타: environment -> enviroment (.env 파일과 일치)
+	envName := os.Getenv("environment") // 오타: environment -> enviroment (.env 파일과 일치)
 	if envName == "" {
 		envName = "local"
 	}
