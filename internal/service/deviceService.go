@@ -2,11 +2,15 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"go-rest-example/internal/db"
 	"go-rest-example/internal/model/data"
 	"go-rest-example/internal/model/external"
 	"go-rest-example/internal/util"
 	"time"
+
+	error2 "go-rest-example/internal/error"
 )
 
 // DeviceService 인터페이스 (의존성 역전을 위해)
@@ -37,14 +41,7 @@ func (d *DeviceService) Create(parentCtx context.Context, deviceReq external.Dev
 
 	return d.uow.Execute(ctx, func(work db.IUnitOfWork) error {
 
-		// 2. DB 중복 객체 존재 여부 확인
-		findDevice, err := work.Device().GetByProductNumber(ctx, deviceReq.ProductNumber)
-		if err != nil || findDevice != nil {
-			// 상위 레이어에게 전달
-			return err
-		}
-
-		// 3. 객체 생성을 위한 도메인 엔티티 생성
+		// 1. 객체 생성을 위한 도메인 엔티티 생성
 		newDevice := data.Device{
 			InternalID 	  : 1, 
 			ProductNumber : deviceReq.ProductNumber,
@@ -54,13 +51,31 @@ func (d *DeviceService) Create(parentCtx context.Context, deviceReq external.Dev
 			CreatedAt     : time.Now(),
 			ReTry         : 0,
 			UpdateCheck   : 0,
-			Status        : data.StatusReady,
+			Status        : data.ReportPowerOn,
 		}
 
-		_, err = work.Device().Create(ctx, &newDevice)
+		_, err := work.Device().Create(ctx, &newDevice)
 		if err != nil {
-			// 상위 레이어에게 전달
-			return err
+			return error2.NewInternalServerError(err)
+		}
+		
+		// 2. 최초 보고 로직 생성 
+		newReport := data.DeviceInfo{
+				ReportID          : 1,
+				ProductNumber     : deviceReq.ProductNumber,
+				BatteryPercent    : 0,
+				Lat               : 0,
+				Lon               : 0,
+				TemperatureCelsius: 0,
+				IP                : "255.255.255.255",
+				ErrorCode         : 0,
+				ReportAt          : time.Now(),
+				ReportedStatus    : data.ReportPowerOn,
+		}
+
+		_, err = work.Report().Create(ctx, &newReport)
+		if err != nil {
+			return error2.NewInternalServerError(err)
 		}
 
 		return nil
@@ -76,11 +91,16 @@ func(d *DeviceService) GetAll(parentCtx context.Context)(*[]data.Device, error){
 
 	// 0. 데이터 레이어를 통한 정보 획득 
 	devices, err := d.uow.Device().GetAll(ctx)
+
+	// 1. 에러 처리 구간
 	if err != nil {
-		return nil, err
+		if errors.Is(err, sql.ErrNoRows){
+			return nil, error2.NewNotFoundError("Device Get All request to faile")
+		}
+		return nil, error2.NewInternalServerError(err)
 	}
 
-	// 1. 정보 반환 
+	// 2. 정보 반환 
 	return devices, nil
 }
 
@@ -92,9 +112,13 @@ func(d *DeviceService) GetByProductNumber(parentCtx context.Context, ProductNumb
 
 	// 1. 데이터 레이어를 통한 정보 획득 
 	findDevice, err := d.uow.Device().GetByProductNumber(ctx, ProductNumber)
+
+	// 2. 에러 처리 구간 
 	if err != nil {
-		// 커스텀 에러 선언 필요 
-		return nil, err
+		if errors.Is(err, sql.ErrNoRows){
+			return nil, error2.NewNotFoundError("Device Get request to faile")
+		}
+		return nil, error2.NewInternalServerError(err)
 	}
 
 	// 2. 정보 반환

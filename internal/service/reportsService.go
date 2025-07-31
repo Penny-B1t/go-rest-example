@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 
 	"go-rest-example/internal/db"
 	"go-rest-example/internal/model/data"
 	"go-rest-example/internal/model/external"
 	"go-rest-example/internal/util"
+
+	error2 "go-rest-example/internal/error"
 )
 
 // ReportService 인터페이스 (의존성 역전을 위해)
@@ -15,12 +18,6 @@ type IReportService interface {
 	DeviceReport(parentCtx context.Context, reportReq external.ReportReq) ( *external.DeviceUpdate, error)
 	CheckForUpdate(parentCtx context.Context, ID string) (string, error) 
 }
-
-//
-var (
-	ErrDeviceNotFound    = errors.New("device not found")
-	ErrFirmwareNotAvailable = errors.New("firmware not available or update not allowed")
-)
 
 // 실제 구현체
 type ReportService struct {
@@ -52,10 +49,10 @@ func(r *ReportService) DeviceReport(parentCtx context.Context, reportReq externa
 		// 2-2. 디바이스 존재 여부 검증
 		device, err := deviceRepo.GetByProductNumber(ctx, reportReq.ProductNumber)
 		if err != nil {
-			if errors.Is(err, db.ErrFailedToSelectDevice) { // 리포지토리의 에러를 더 구체적인 서비스 에러로 변환
-				return ErrDeviceNotFound
+			if errors.Is(err, sql.ErrNoRows) { // 리포지토리의 에러를 더 구체적인 서비스 에러로 변환
+				return error2.NewNotFoundError("Deovice Get request to faile")
 			}
-			return err
+			return error2.NewInternalServerError(err)
 		}
 
 		// 2-3. 보고 정보(report) 레코드 생성
@@ -70,7 +67,7 @@ func(r *ReportService) DeviceReport(parentCtx context.Context, reportReq externa
 			ReportedStatus:     reportReq.ReportedStatus,
 		}
 		if _, err := reportRepo.Create(ctx, &report); err != nil {
-			return err
+			return error2.NewInternalServerError(err)
 		}
 		
 		// 2-4. 디바이스 상태 업데이트 (필요 시)
@@ -85,7 +82,7 @@ func(r *ReportService) DeviceReport(parentCtx context.Context, reportReq externa
 			device.ReTry = newRetryCount // 아래 제어 로직에서 사용하기 위해 로컬 변수도 업데이트
 		}
 		if err := deviceRepo.Update(ctx, device.ProductNumber, updateParams); err != nil {
-			return err
+			return error2.NewInternalServerError(err)
 		}
 
 		// 3. 비즈니스 로직: 제어 명령 생성
@@ -120,7 +117,10 @@ func(d *ReportService) CheckForUpdate(parentCtx context.Context, ID string) (str
 
 	findDevice, err := d.uow.Device().GetByProductNumber(ctx,ID)
 	if err != nil {
-		return "", err
+		if errors.Is(err, sql.ErrNoRows) { // 리포지토리의 에러를 더 구체적인 서비스 에러로 변환
+			return "",error2.NewNotFoundError("Deovice Get request to faile")
+		}
+		return "",error2.NewInternalServerError(err)
 	}
 
 	// 2. 업데이트 조건 확인
@@ -128,14 +128,14 @@ func(d *ReportService) CheckForUpdate(parentCtx context.Context, ID string) (str
 	const latestFirmwareVersion = "v1.2.0"
 	if findDevice.UpdateCheck == 0 || findDevice.FirmwareVersion == latestFirmwareVersion {
 		// 업데이트가 허용되지 않았거나, 이미 최신 버전인 경우
-		return "", ErrFirmwareNotAvailable
+		return "", error2.NewNotFoundError("firmware not available or update not allowed")
 	}
 
 	// 3. 펌웨어 파일 경로 확인
 	// TODO: 실제 펌웨어 파일 경로를 반환하는 로직 필요
 	firmwarePath := "firmware/latest.bin"
 	if err := util.PathValid(firmwarePath); err != nil {
-		return "", err
+		return "", error2.NewNotFoundError("firmware not found")
 	}
 
 	

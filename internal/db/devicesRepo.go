@@ -11,17 +11,7 @@ import (
 	"go-rest-example/internal/model/external"
 )
 
-var (
-	ErrInvalidDeviceRequired          = errors.New("missing required inputs to create DeviceRepo")
-	ErrNothingAffrectedDevice         = errors.New("nothing affected to DeviceRepo")
-	ErrFailedToCreateDevice 		  = errors.New("failed to create device")
-	ErrFailedToSelectDevice 		  = errors.New("failed to select device")
-	ErrFailedToUpdateDevice 		  = errors.New("failed to update device")
-	ErrFailedToDeleteDevice 	      = errors.New("failed to delete device")
-)
-
-// DeviceRepo를 통해 사용할 메서드를 제약하고 규정하기 위한 인터페이스 
-// 입력 타입 및 반환 타입 수정 필요 
+// DeviceRepo를 통해 사용할 메서드를 제약하고 규정하기 위한 인터페이스
 type DevicesDataService interface {
 	Create(ctx context.Context, di *data.Device) (int64, error) 
 	GetAll(ctx context.Context) (*[]data.Device, error)
@@ -44,14 +34,13 @@ func NewDevicesRepo(lgr *logger.AppLogger, db DBTX) *DevicesRepo {
 	}
 }
 
-// 커스텀 에러처리 완료 
 func (d *DevicesRepo) Create(ctx context.Context, device *data.Device)(int64, error){
 
 	d.logger.Info().Msg("call create")
 	
 	query := `
         INSERT INTO devices (ProductNumber, MacAddress, FirmwareVersion, LastSeenAt, CreatedAt, ReTry, UpdateCheck, Status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)` // 플레이스홀더(?)도 8개로 수정
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
     // ReTry와 UpdateCheck에 0을 명시적으로 전달합니다.
     result, err := d.connection.ExecContext(ctx, query,
@@ -67,15 +56,14 @@ func (d *DevicesRepo) Create(ctx context.Context, device *data.Device)(int64, er
 
 	if err != nil {
 		d.logger.Error().Err(err).Msg("[deviceRepo] failed to create device with sqlx")
-		return 0, ErrFailedToCreateDevice
+		return 0, err
 	}
 
 	lastID, err := result.LastInsertId()
 
-	d.logger.Info().Int64("테스트",lastID)
 	if err != nil {
 		d.logger.Error().Err(err).Msg("[deviceRepo] non create device with sqlx")
-		return 0, ErrFailedToCreateDevice
+		return 0, err
 	}
 
 	return lastID, nil
@@ -92,7 +80,8 @@ func (d *DevicesRepo) GetAll(ctx context.Context) (*[]data.Device, error){
 	err := d.connection.SelectContext(ctx, &devices, query)
 
 	if err != nil {
-		return nil, errors.New("커스텀 에러")
+		d.logger.Error().Err(err).Msg("[deviceRepo] non select device with sqlx")
+		return nil, err
 	}
 
 	return &devices, nil
@@ -109,7 +98,7 @@ func (d *DevicesRepo) GetByProductNumber(ctx context.Context, productNumber stri
 
 	if err != nil {
 		d.logger.Error().Err(err).Msg("[deviceRepo] failed to select device with sqlx")
-		return nil, ErrFailedToSelectDevice
+		return nil, err
 	}
 
 	 return &device, nil
@@ -119,7 +108,7 @@ func (d *DevicesRepo) Update(ctx context.Context, productNumber string, parmas *
 
 	query, args := d.GenerateUpdateQuery(parmas)
 	if query == "" || args == nil {
-		return errors.New("non Query")
+		return errors.New("[deviceRepo] non Query")
 	}
 
 	// 식별자 추가 
@@ -129,14 +118,14 @@ func (d *DevicesRepo) Update(ctx context.Context, productNumber string, parmas *
     result, err := d.connection.ExecContext(ctx,query, args...)
     if err != nil {
         d.logger.Error().Err(err).Msg("[deviceRepo] failed to update device")
-        return ErrFailedToUpdateDevice
+        return err
     }
 
 	// 6. 실제로 변경이 일어났는지 확인 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil || rowsAffected == 0 {
 		d.logger.Error().Err(err).Msg("[deviceRepo] non update device")
-		return ErrFailedToUpdateDevice
+		return err
 	}
 
 	return nil
@@ -148,13 +137,13 @@ func (d *DevicesRepo) Delete(ctx context.Context, productNumber string)  error {
 	result, err := d.connection.ExecContext(ctx, query, productNumber)
 	if err != nil {
 		d.logger.Error().Err(err).Msg("[deviceRepo] failed to delete devices")
-		return ErrFailedToDeleteDevice
+		return err
 	}
 
 	_, err = result.RowsAffected()
 	if err != nil {
 		d.logger.Error().Err(err).Msg("[deviceRepo] non Delete device)")
-		return ErrNothingAffrectedDevice
+		return err
 	}
 
 	return nil

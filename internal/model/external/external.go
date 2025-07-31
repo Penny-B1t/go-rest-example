@@ -39,17 +39,16 @@ type DeviceReq struct {
 
 func (d *DeviceReq)Validate() error{
 
-	// 옵션 정규표현식 사용 가능 
+	// 현재는 간단한 길이만 점검
 	if len(d.ProductNumber) > 9 {
-		return errors.New("커스텀 에러") 
+		return errors.New("invalid ProductNumber address") 
 	}
 
-	// mac 주소 형식 검사 
 	macAddressPattern := `^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$`
 	re := regexp.MustCompile(macAddressPattern)
 	result := re.MatchString(d.MacAddress)
 	if !result {
-		return errors.New("커스텀 에러")
+		return errors.New("invalid MAC address")
 	}
 
 	return nil
@@ -87,7 +86,7 @@ func(r *ReportReq)Validate() error {
 	// 제품 명칭 길이 : 정규 표현식 사용 고려 
 	// 간단한 예시 
 	if len(r.ProductNumber) > 9 {
-		return errors.New("invalide to Name lange")
+		return errors.New("invalide to ProductNumber lange")
 	}
 
 	return nil

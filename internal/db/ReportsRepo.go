@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"go-rest-example/internal/logger"
@@ -13,16 +12,6 @@ import (
 const (
 	DefSchema = "reports"
 	DefLimit  = 50
-)
-// orm을 사용하지 않은 이유?
-
-// 오류 상수 선언
-var (
-	ErrInvalidReportRequired          = errors.New("missing required inputs to create ReportsRepo")
-	ErrFailedToCreateReportInfo = errors.New("failed to create device_info")
-	ErrFailedToSelectReportInfo = errors.New("failed to select device_info")
-	ErrFailedToDeleteReportInfo = errors.New("failed to delete device_info")
-	ErrInvalidIDSelect          = errors.New(" invalid ProductNumber")
 )
 
 // ReportsRepo를 통해 사용할 메서드를 제약하고 규정하기 위한 인터페이스 
@@ -59,7 +48,7 @@ func (r *ReportsRepo) Create(ctx context.Context, di *data.DeviceInfo) (int64, e
 
 	if err != nil {
 		r.logger.Error().Err(err).Msg("failed to create device_info")
-		return 0, ErrFailedToCreateReportInfo
+		return 0, err
 	}
 
 	lastID, err := result.LastInsertId()
@@ -82,7 +71,7 @@ func (r *ReportsRepo) GetAll(ctx context.Context) (*[]data.DeviceInfo, error) {
 	err := r.connection.SelectContext(ctx, &reports, query, DefLimit)
 	if err != nil {
 		r.logger.Error().Err(err).Msg("failed to select all reports with sqlx")
-		return nil, ErrFailedToSelectReportInfo
+		return nil, err
 	}
 	return &reports, nil
 }
@@ -100,7 +89,7 @@ func (r *ReportsRepo) GetByProductNumber(ctx context.Context, productNumber stri
 	err := r.connection.SelectContext(ctx, &reports, query, productNumber, DefLimit)
 	if err != nil {
 		r.logger.Error().Err(err).Str("productNumber", productNumber).Msg("failed to select reports by product number with sqlx")
-		return nil, ErrFailedToSelectReportInfo
+		return nil, err
 	}
 	return &reports, nil
 }
@@ -112,7 +101,7 @@ func (r *ReportsRepo) Delete(ctx context.Context, productNumber string) error {
 	result, err := r.connection.ExecContext(ctx, query, productNumber)
 	if err != nil {
 		r.logger.Error().Err(err).Msg("failed to delete device_info")
-		return ErrFailedToDeleteReportInfo
+		return err
 	}
 
 	_, err = result.RowsAffected()

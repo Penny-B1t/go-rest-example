@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 
+	error2 "go-rest-example/internal/error"
 	"go-rest-example/internal/logger"
 	"go-rest-example/internal/model/external"
 	"go-rest-example/internal/service"
@@ -32,25 +33,24 @@ func NewReportsHandler(lgr *logger.AppLogger, rpService service.IReportService) 
 
 // Create handles GET /report/.
 func(d *ReportsHandler) Report(c *gin.Context){
-	lgr, requestID := d.logger.WithReqID(c)
 	var reportReq external.ReportReq
 
 	// 0. BODY -> JSON 직렬화 
 	if err := c.ShouldBindBodyWithJSON(&reportReq); err != nil {
-		d.abortWithAPIError(c, lgr, http.StatusBadRequest, "Invalid report request body", requestID, err)
+		c.Error(error2.NewBadValidateError(err))
 		return
 	}
 
 	// 1. 객체 유효성 검사 
 	err := reportReq.Validate()
 	if err != nil {
-		d.abortWithAPIError(c, lgr, http.StatusBadRequest, "Invalid report request body", requestID, err)
+		c.Error(error2.NewBadValidateError(err))
 		return 
 	}
 
 	reportRes, err := d.rpService.DeviceReport(c, reportReq)
 	if err != nil {
-		//  커스텀 에러 선언 
+		c.Error(err)
 		return
 	}
 
@@ -67,6 +67,7 @@ func(d *ReportsHandler) Update(c *gin.Context){
 
 	path, err := d.rpService.CheckForUpdate(c, i)
 	if err != nil {
+		c.Error(err)
 		return 
 	}
 
