@@ -16,13 +16,14 @@ func (e *AppError) Error() string {
 	return e.Message
 }
 
-func NewNotFoundError(message string) *AppError {
+func NewNotFoundError(message string, err error) *AppError {
 	if message == "" {
 		message = "요청한 리소스를 찾을 수 없습니다."
 	}
 	return &AppError{
 		StatusCode: http.StatusNotFound,
 		Message: message,
+		Err: err,
 	}
 }
 
@@ -35,13 +36,14 @@ func NewBadValidateError(err error) *AppError {
 		
 }
 
-func NewBadRequestError(message string) *AppError {
+func NewBadRequestError(message string, err error) *AppError {
 	if message == "" {
 		message = "잘못된 요청입니다."
 	}
 	return &AppError{
 		StatusCode: http.StatusBadRequest,
 		Message:    message,
+		Err: err,
 	}
 }
 

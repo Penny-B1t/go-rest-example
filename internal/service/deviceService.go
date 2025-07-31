@@ -95,7 +95,7 @@ func(d *DeviceService) GetAll(parentCtx context.Context)(*[]data.Device, error){
 	// 1. 에러 처리 구간
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows){
-			return nil, error2.NewNotFoundError("Device Get All request to faile")
+			return nil, error2.NewNotFoundError("Device Get All request to faile", err)
 		}
 		return nil, error2.NewInternalServerError(err)
 	}
@@ -116,7 +116,7 @@ func(d *DeviceService) GetByProductNumber(parentCtx context.Context, ProductNumb
 	// 2. 에러 처리 구간 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows){
-			return nil, error2.NewNotFoundError("Device Get request to faile")
+			return nil, error2.NewNotFoundError("Device Get request to faile", err)
 		}
 		return nil, error2.NewInternalServerError(err)
 	}

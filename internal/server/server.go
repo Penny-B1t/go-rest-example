@@ -91,6 +91,9 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 	router := gin.New();
 	
 	router.Use(gin.Recovery())
+
+	router.Use(middleware.ErrorHandler(lgr))
+
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.ReqIDMiddleware())
 	router.Use(middleware.ResponseHeadersMiddleware())
@@ -115,18 +118,18 @@ func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManag
 	d := dbMgr.DB()
 	uow := db.NewUnitOfWork(d, lgr)
 	if uow == nil {
-		return nil, errors.New("커스텀 에러")
+		return nil, errors.New("Server uow initialize faile")
 	}
 
 	// 0. 서비스 레이어 획득
 	rpService := service.NewUserService(uow)
 	if rpService == nil {
-		return nil, errors.New("커스텀 에러")
+		return nil, errors.New("Server rpService initialize faile")
 	}
 
 	dvService := service.NewDeviceService(uow)
 	if dvService == nil {
-		return nil, errors.New("커스텀 에러")
+		return nil, errors.New("Server dvService initialize faile")
 	}
 
 	deviceHandler, deviceHandlerErr := handlers.NewDevicesHandler(lgr, dvService)

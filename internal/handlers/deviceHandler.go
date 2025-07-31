@@ -44,7 +44,7 @@ func(d *DevicesHandler) Create(c *gin.Context){
 	// 1. 객체 유효성 검사 
 	err = deviceReq.Validate()
 	if err != nil{
-		c.Error(err)
+		c.Error(error2.NewBadValidateError(err))
 		return 
 	}
 

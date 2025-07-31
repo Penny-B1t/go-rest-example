@@ -50,7 +50,7 @@ func(r *ReportService) DeviceReport(parentCtx context.Context, reportReq externa
 		device, err := deviceRepo.GetByProductNumber(ctx, reportReq.ProductNumber)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) { // 리포지토리의 에러를 더 구체적인 서비스 에러로 변환
-				return error2.NewNotFoundError("Deovice Get request to faile")
+				return error2.NewNotFoundError("Deovice Get request to faile", err)
 			}
 			return error2.NewInternalServerError(err)
 		}
@@ -118,7 +118,7 @@ func(d *ReportService) CheckForUpdate(parentCtx context.Context, ID string) (str
 	findDevice, err := d.uow.Device().GetByProductNumber(ctx,ID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) { // 리포지토리의 에러를 더 구체적인 서비스 에러로 변환
-			return "",error2.NewNotFoundError("Deovice Get request to faile")
+			return "",error2.NewNotFoundError("Deovice Get request to faile", err)
 		}
 		return "",error2.NewInternalServerError(err)
 	}
@@ -128,14 +128,14 @@ func(d *ReportService) CheckForUpdate(parentCtx context.Context, ID string) (str
 	const latestFirmwareVersion = "v1.2.0"
 	if findDevice.UpdateCheck == 0 || findDevice.FirmwareVersion == latestFirmwareVersion {
 		// 업데이트가 허용되지 않았거나, 이미 최신 버전인 경우
-		return "", error2.NewNotFoundError("firmware not available or update not allowed")
+		return "", error2.NewNotFoundError("firmware not available or update not allowed", err)
 	}
 
 	// 3. 펌웨어 파일 경로 확인
 	// TODO: 실제 펌웨어 파일 경로를 반환하는 로직 필요
 	firmwarePath := "firmware/latest.bin"
 	if err := util.PathValid(firmwarePath); err != nil {
-		return "", error2.NewNotFoundError("firmware not found")
+		return "", error2.NewNotFoundError("firmware not found", err)
 	}
 
 	
