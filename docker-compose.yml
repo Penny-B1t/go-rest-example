@@ -5,11 +5,8 @@ services:
     image: mariadb:10.11
     container_name: iot_mariadb
     restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: your_database_password
-      MYSQL_DATABASE: iot_device_db
-      MYSQL_USER: iot_user
-      MYSQL_PASSWORD: iot_password
+    env_file:
+      - db.env
     ports:
       - "3306:3306"
     volumes:
@@ -32,16 +29,7 @@ services:
     container_name: iot_api
     restart: unless-stopped
     ports:
-      - "8080:8080"
-    environment:
-      - environment=docker
-      - port=8080
-      - logLevel=info
-      - host=mariadb
-      - user=root
-      - password=your_database_password
-      - dbport=3306
-      - dbname=iot_device_db
+      - "9000:8080"
     depends_on:
       mariadb:
         condition: service_healthy
@@ -49,6 +37,7 @@ services:
       - iot_network
     volumes:
       - ./firmware:/app/firmware:ro  # 펌웨어 파일용 볼륨
+      - ./config:/app/config:ro
 
 volumes:
   mariadb_data:

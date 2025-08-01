@@ -8,15 +8,15 @@ import (
 
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
+	"go-rest-example/config"
 	"go-rest-example/internal/db"
 	"go-rest-example/internal/logger"
-	"go-rest-example/internal/model"
 	"go-rest-example/internal/server"
 
 	"github.com/joho/godotenv"
+	"github.com/spf13/viper"
 )
 
 // 상수 선언언
@@ -46,26 +46,29 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// 2. 환경변수 및 의존성 설정 
-	svcenv, envErr := getEnvConfig()
-	if envErr != nil {
-		return envErr
+	cfg, cfgErr := LoadConfig()
+	if cfgErr != nil {
+		return cfgErr
 	}
-	lgr := logger.Setup(svcenv.LogLevel, svcenv.Name)
-	dbConnMgr, dbErr := setupDB(lgr, svcenv)
+
+
+	lgr := logger.Setup(cfg.App.LogLevel, cfg.App.Environment)
+	dbConnMgr, dbErr := setupDB(lgr, cfg)
 	if dbErr != nil {
 		return dbErr
 	}
 	defer cleanup(lgr, dbConnMgr) 
 
+	lgr.Info().Msgf("config: %+v", cfg)
+
 	// 3. [REFACTOR] 서버 시작 로직 간소화
 	lgr.Info().
 		Str("name", serviceName).
-		Str("environment", svcenv.Name).
+		Str("environment", cfg.App.Environment).
 		Str("version", version).
 		Msg("starting the service")
 
-	if err := server.Start(ctx, svcenv, lgr, dbConnMgr); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := server.Start(ctx, cfg, lgr, dbConnMgr); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		lgr.Error().Err(err).Msg("server failed to start")
 		return err
 	}
@@ -73,79 +76,39 @@ func run() error {
 	lgr.Info().Msg("service stopped")
 	return nil
 }
-	
 
-// .env 파일을 읽어 시스템 동작에 사용한다.
-// builder 패턴을 사용하여 환경 변수 객체의 주소값을 반환한다.
-func getEnvConfig() (*model.ServiceEnv, error) {
-	// 작업 환경 구분
-	// 기본값 local
-	envName := os.Getenv("environment") // 오타: environment -> enviroment (.env 파일과 일치)
-	if envName == "" {
-		envName = "local"
+func LoadConfig() (config *config.Config, err error) {
+
+	// 0. 기본값 지정
+	viper.SetDefault("app.logLevel", "info")
+	viper.SetDefault("server.port", 8080)
+	viper.SetDefault("db.host", "localhost")
+	viper.SetDefault("db.port", 3306)
+
+	// 1. viper 인스턴스 생성
+	viper.AddConfigPath("./config")
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+
+	// 환경 변수를 자동으로 읽어오도록 설정합니다
+	viper.AutomaticEnv()
+
+	// 설정 파일을 읽습니다.
+	if err := viper.ReadInConfig(); err != nil {
+		// 파일이 없는 경우(ConfigFileNotFoundError)는 에러가 아니므로,
+		// 로그만 남기고 무시합니다. 기본값과 환경변수로 계속 진행합니다.
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			// 그 외 다른 파일 관련 에러(권한 문제 등)는 실제 에러이므로 반환합니다.
+			return config, fmt.Errorf("failed to read config file: %w", err)
+		}
+		fmt.Println("Warning: config.yaml not found. Using defaults and environment variables.")
 	}
 
-	// 애플리케이션 포트 번호
-	// 기본값 8080
-	port := os.Getenv("port")
-	if port == "" {
-		port = defaultPort
-	}
 
-	// 데이터베이스 호스트 정보
-	// 기본값 localhost
-	host := os.Getenv("host")
-	if host == "" {
-		host = "localhost"
-	}
+	// 설정값을 구조체 인스턴스로 변환
+	err = viper.Unmarshal(&config)
 
-	// 데이터베이스 사용자 정보
-	// 기본값 root
-	user := os.Getenv("user")
-	if user == "" {
-		user = "root"
-	}
-
-	// 데이터베이스 패스워드
-	// 필수 (보안상 기본값 없음)
-	password := os.Getenv("password")
-	if password == "" {
-		return nil, errors.New("database password is required")
-	}
-
-	// 데이터베이스 포트 번호
-	// 기본값 3306 (MySQL/MariaDB 기본 포트)
-	dbPort := os.Getenv("dbport")
-	if dbPort == "" {
-		dbPort = "3306"
-	}
-
-	// DB 명칭 확인
-	// 필수
-	dbname := os.Getenv("dbname")
-	if dbname == "" {
-		return nil, errors.New("database name is required")
-	}
-
-	// 로그 레벨 지정
-	logLevel := os.Getenv("logLevel")
-	if logLevel == "" {
-		logLevel = defaultLogLevel
-	}
-
-	// ServiceEnv 구조체 생성 및 반환
-	envConfigurations := &model.ServiceEnv{
-		Name:     envName,
-		Host:     host,
-		User:     user,
-		Password: password,
-		Port:     port,
-		DBPort:   dbPort,
-		DBname:   dbname,
-		LogLevel: logLevel,
-	}
-
-	return envConfigurations, nil
+	return
 }
 
 
@@ -158,20 +121,16 @@ func exitCode(err error) int {
 }
 
 
-func setupDB(lgr *logger.AppLogger, svcEnv *model.ServiceEnv) (db.DBManager, error) {
-	portInt, err := strconv.Atoi(svcEnv.DBPort)
-	if err != nil {
-		return nil, fmt.Errorf("invalid port: %v", err)
-	}
+func setupDB(lgr *logger.AppLogger, cfg *config.Config) (db.DBManager, error) {
 	connOpts := &db.MariaDBCredentials{
-		User:     svcEnv.User,
-		Password: svcEnv.Password,
-		Host:     svcEnv.Host,
-		Port:     portInt,
-		Database: svcEnv.DBname,
+		User:     cfg.DB.User,
+		Password: cfg.DB.Password,
+		Host:     cfg.DB.Host,
+		Port:     cfg.DB.Port,
+		Database: cfg.DB.Database,
 	}
 
-	dbConnMgr, dberr := db.NewMariaDBManager(connOpts, lgr)
+	dbConnMgr, dberr := db.NewMariaDBManager(connOpts, lgr, cfg.App.Environment)
 	if dberr != nil {
 		return nil, dberr
 	}

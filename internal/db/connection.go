@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"go-rest-example/internal/logger"
+	"go-rest-example/internal/util"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // MySQL 드라이버는 그대로 사용합니다.
@@ -75,7 +76,7 @@ var (
 	ErrPingDB            = errors.New("failed to ping DB")
 )
 
-func NewMariaDBManager(creds *MariaDBCredentials, lgr *logger.AppLogger) (DBManager, error) {
+func NewMariaDBManager(creds *MariaDBCredentials, lgr *logger.AppLogger, envMode string) (DBManager, error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true",
 		creds.User,
 		creds.Password,
@@ -84,13 +85,17 @@ func NewMariaDBManager(creds *MariaDBCredentials, lgr *logger.AppLogger) (DBMana
 		creds.Database,
 	)
 
-	lgr.Info().Str("connURL", MaskConnectionDSN(creds)).Msg("connecting to MariaDB with sqlx")
-
 	db, err := sqlx.Connect("mysql", dsn)
 	if err != nil {
 		lgr.Error().Err(err).Msg("failed to connect or ping DB with sqlx")
 		return nil, ErrConnectionEstablish
 	}
+
+	if !util.IsDevMode(envMode) {
+		dsn = MaskConnectionDSN(creds)
+	}
+
+	lgr.Info().Str("connURL", dsn).Msg("connecting to MariaDB with sqlx")
 
 	db.SetConnMaxLifetime(time.Minute * 3)
 	db.SetMaxOpenConns(10)

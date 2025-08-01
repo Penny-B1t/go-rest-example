@@ -5,17 +5,18 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 
+	"go-rest-example/config"
 	"go-rest-example/internal/db"
 	"go-rest-example/internal/handlers"
 	"go-rest-example/internal/logger"
 	"go-rest-example/internal/middleware"
-	"go-rest-example/internal/model"
 	"go-rest-example/internal/service"
 	"go-rest-example/internal/util"
 )
@@ -24,9 +25,9 @@ import (
 var startOnce sync.Once
 
 
-func Start(ctx context.Context, svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManager) error {
+func Start(ctx context.Context, cfg *config.Config, lgr *logger.AppLogger, dbMgr db.DBManager) error {
 	// 1. Gin 라우터 설정 (이전과 동일)
-	router, err := WebRouter(svcEnv, lgr, dbMgr)
+	router, err := WebRouter(cfg, lgr, dbMgr)
 	if err != nil {
 		return err
 	}
@@ -37,7 +38,7 @@ func Start(ctx context.Context, svcEnv *model.ServiceEnv, lgr *logger.AppLogger,
 
 	// 2. 표준 http.Server 생성 및 설정
 	srv := &http.Server{
-		Addr:    ":" + svcEnv.Port,
+		Addr:    ":" + strconv.Itoa(cfg.Server.Port),
 		Handler: router,
 	}
 
@@ -73,12 +74,12 @@ func Start(ctx context.Context, svcEnv *model.ServiceEnv, lgr *logger.AppLogger,
 
 
 // 경로 정보를 지정하고, 의존성을 주입하는 역할을 수행한다.
-func WebRouter(svcEnv *model.ServiceEnv, lgr *logger.AppLogger, dbMgr db.DBManager) (*gin.Engine, error ){
+func WebRouter(cfg *config.Config, lgr *logger.AppLogger, dbMgr db.DBManager) (*gin.Engine, error ){
 
 
 	// 1. 환경 변수에 따라서 콘솔에 변화를 준다
 	ginMode := gin.ReleaseMode
-	if util.IsDevMode(svcEnv.Name){
+	if util.IsDevMode(cfg.App.Environment){
 		ginMode = gin.DebugMode
 		gin.ForceConsoleColor()
 	}

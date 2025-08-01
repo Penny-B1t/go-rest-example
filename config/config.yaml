@@ -1,0 +1,13 @@
+app:
+  enviroment: debug
+  logLevel: info
+
+server:
+  port: 8080
+
+db:
+  host: mariadb
+  port: 3306
+  user: root
+  password: your_database_password
+  database: iot_device_db

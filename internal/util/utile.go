@@ -26,7 +26,7 @@ func CurrentISOTime() string {
 
 // IsDevMode - Checks if the given string denotes any of the development environment.
 func IsDevMode(s string) bool {
-	return strings.Contains(s, "local") || strings.Contains(s, "dev")
+	return strings.Contains(s, "debug")
 }
 
 // 파일 경로를 검증하는 함수

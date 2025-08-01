@@ -29,3 +29,11 @@ COPY --from=builder /app/main .
 EXPOSE 8080
 
 CMD ["./main"]
+
+#--------------------------------
+# Development stage with Air for live reloading
+
+FROM golang:1.23.9 as dev
+WORKDIR /app
+RUN go install github.com/air-verse/air@latest
+CMD ["air"]
