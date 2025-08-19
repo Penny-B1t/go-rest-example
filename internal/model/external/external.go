@@ -2,7 +2,7 @@ package external
 
 import (
 	"errors"
-	"go-rest-example/internal/model/data"
+	"go-rest-example/internal/model"
 	"regexp"
 	"time"
 )
@@ -12,10 +12,12 @@ var (
 	errordRequired = errors.New("error code is required when status is ERROR")
 )
 
+// 
+type validationDeviceRule func(r *DeviceReq) error
+
 // DTO 선언 응답 혹은
 
 // 오류에 대한 응답 DTO
-// 오류에 대한 모든 내용을 출력할 될 경우 보안 취약점으로 돌아올 수 있기 때문에 행태 제한
 type APIError struct {
 	HTTPStatusCode int     `json:"httpStatusCode"`
 	Message        string  `json:"message"`
@@ -37,20 +39,40 @@ type DeviceReq struct {
 	FirmwareVersion string  
 }
 
-func (d *DeviceReq)Validate() error{
-
-	// 현재는 간단한 길이만 점검
-	if len(d.ProductNumber) > 9 {
+// 검증 함수 선언
+func validateProductName(d *DeviceReq) error {
+    if len(d.ProductNumber) > 9 {
 		return errors.New("invalid ProductNumber address") 
 	}
+    return nil
+}
 
-	macAddressPattern := `^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$`
+func validateMacAddress(d *DeviceReq) error {
+
+    macAddressPattern := `^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$`
 	re := regexp.MustCompile(macAddressPattern)
 	result := re.MatchString(d.MacAddress)
 	if !result {
 		return errors.New("invalid MAC address")
 	}
 
+    return nil
+}
+
+func (d *DeviceReq)Validate() error{
+
+	rules := []validationDeviceRule{
+        validateProductName,
+        validateMacAddress,
+    }
+
+	for _, rule := range rules {
+		if err := rule(d); err != nil {
+			return err
+		}
+	}
+
+	// 모든 규칙을 통과하면 nil을 반환합니다.
 	return nil
 }
 
@@ -63,7 +85,7 @@ type ReportReq struct {
 	TemperatureCelsius float64           `json:"temperatureCelsius" binding:"required"`
 	IP                 string            `json:"ip" binding:"required,ip"`
 	ErrorCode          int               `json:"errorCode"` 
-	ReportedStatus     data.DeviceStatus `json:"reportedStatus" binding:"required"`
+	ReportedStatus     model.DeviceStatus `json:"reportedStatus" binding:"required"`
 }
 
 // 복합 조건 검증 수행 
@@ -95,9 +117,9 @@ func(r *ReportReq)Validate() error {
 
 // Device를 업데이트할 때 사용할 파라미터
 type UpdateDeviceParams struct {
-    FirmwareVersion *string
-    LastSeenAt      *time.Time
-    ReTry           *int
-    UpdateCheck     *int
-    Status          *data.DeviceStatus
+    FirmwareVersion string
+    LastSeenAt      time.Time
+    ReTry           int
+    UpdateCheck     int
+    Status          model.DeviceStatus
 }

@@ -5,7 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"go-rest-example/internal/db"
-	"go-rest-example/internal/model/data"
+	"go-rest-example/internal/model"
+	"go-rest-example/internal/model/domain"
 	"go-rest-example/internal/model/external"
 	"go-rest-example/internal/util"
 	"time"
@@ -16,8 +17,8 @@ import (
 // DeviceService 인터페이스 (의존성 역전을 위해)
 type IDeviceService interface {
 	Create(parentCtx context.Context, deviceReq external.DeviceReq) error 
-	GetAll(parentCtx context.Context)(*[]data.Device, error)
-	GetByProductNumber(parentCtx context.Context, ProductNumber string)(*data.Device, error)
+	GetAll(parentCtx context.Context)(*[]domain.Device, error)
+	GetByProductNumber(parentCtx context.Context, ProductNumber string)(*domain.Device, error)
 }
 
 // 실제 구현체
@@ -42,16 +43,15 @@ func (d *DeviceService) Create(parentCtx context.Context, deviceReq external.Dev
 	return d.uow.Execute(ctx, func(work db.IUnitOfWork) error {
 
 		// 1. 객체 생성을 위한 도메인 엔티티 생성
-		newDevice := data.Device{
+		newDevice := domain.Device{
 			InternalID 	  : 1, 
 			ProductNumber : deviceReq.ProductNumber,
 			MacAddress    : deviceReq.MacAddress,
 			FirmwareVersion : deviceReq.FirmwareVersion,  
 			LastSeenAt    : time.Now(),
-			CreatedAt     : time.Now(),
 			ReTry         : 0,
 			UpdateCheck   : 0,
-			Status        : data.ReportPowerOn,
+			Status        : model.ReportPowerOn,
 		}
 
 		_, err := work.Device().Create(ctx, &newDevice)
@@ -60,7 +60,7 @@ func (d *DeviceService) Create(parentCtx context.Context, deviceReq external.Dev
 		}
 		
 		// 2. 최초 보고 로직 생성 
-		newReport := data.DeviceInfo{
+		newReport := domain.DeviceInfo{
 				ReportID          : 1,
 				ProductNumber     : deviceReq.ProductNumber,
 				BatteryPercent    : 0,
@@ -70,7 +70,7 @@ func (d *DeviceService) Create(parentCtx context.Context, deviceReq external.Dev
 				IP                : "255.255.255.255",
 				ErrorCode         : 0,
 				ReportAt          : time.Now(),
-				ReportedStatus    : data.ReportPowerOn,
+				ReportedStatus    : model.ReportPowerOn,
 		}
 
 		_, err = work.Report().Create(ctx, &newReport)
@@ -83,7 +83,7 @@ func (d *DeviceService) Create(parentCtx context.Context, deviceReq external.Dev
 }
 
 // Select handles GET /device.
-func(d *DeviceService) GetAll(parentCtx context.Context)(*[]data.Device, error){
+func(d *DeviceService) GetAll(parentCtx context.Context)(*[]domain.Device, error){
 
 
 	ctx, cancel := context.WithTimeout(parentCtx, util.DefaultServiceTimeout)
@@ -105,7 +105,7 @@ func(d *DeviceService) GetAll(parentCtx context.Context)(*[]data.Device, error){
 }
 
 // Select handles GET /device/ID=.
-func(d *DeviceService) GetByProductNumber(parentCtx context.Context, ProductNumber string)(*data.Device, error){
+func(d *DeviceService) GetByProductNumber(parentCtx context.Context, ProductNumber string)(*domain.Device, error){
 
 	ctx, cancel := context.WithTimeout(parentCtx, util.DefaultServiceTimeout)
 	defer cancel()

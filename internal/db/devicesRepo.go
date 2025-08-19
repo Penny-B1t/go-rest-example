@@ -5,17 +5,20 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"go-rest-example/internal/logger"
-	"go-rest-example/internal/model/data"
+	"go-rest-example/internal/model"
+	"go-rest-example/internal/model/domain"
+	"go-rest-example/internal/model/entity"
 	"go-rest-example/internal/model/external"
 )
 
 // DeviceRepo를 통해 사용할 메서드를 제약하고 규정하기 위한 인터페이스
 type DevicesDataService interface {
-	Create(ctx context.Context, di *data.Device) (int64, error) 
-	GetAll(ctx context.Context) (*[]data.Device, error)
-	GetByProductNumber(ctx context.Context, ID string) (*data.Device, error)
+	Create(ctx context.Context, di *domain.Device) (int64, error) 
+	GetAll(ctx context.Context) (*[]domain.Device, error)
+	GetByProductNumber(ctx context.Context, ID string) (*domain.Device, error)
 	Update(ctx context.Context, ID string, parmas *external.UpdateDeviceParams) error
 	Delete(ctx context.Context, ID string) error
 }
@@ -34,7 +37,7 @@ func NewDevicesRepo(lgr *logger.AppLogger, db DBTX) *DevicesRepo {
 	}
 }
 
-func (d *DevicesRepo) Create(ctx context.Context, device *data.Device)(int64, error){
+func (d *DevicesRepo) Create(ctx context.Context, device *domain.Device)(int64, error){
 
 	d.logger.Info().Msg("call create")
 	
@@ -48,7 +51,7 @@ func (d *DevicesRepo) Create(ctx context.Context, device *data.Device)(int64, er
         device.MacAddress,
         device.FirmwareVersion,
         device.LastSeenAt,
-        device.CreatedAt,
+        time.Now(),
         0, 
         0,
         device.Status,
@@ -69,13 +72,13 @@ func (d *DevicesRepo) Create(ctx context.Context, device *data.Device)(int64, er
 	return lastID, nil
 }
 
-func (d *DevicesRepo) GetAll(ctx context.Context) (*[]data.Device, error){
+func (d *DevicesRepo) GetAll(ctx context.Context) (*[]domain.Device, error){
 
 	query := `
 	SELECT InternalID, ProductNumber, MacAddress, FirmwareVersion, LastSeenAt, CreatedAt, ReTry, UpdateCheck, Status
 	FROM devices`
 
-	var devices []data.Device
+	var devices []entity.Device
 
 	err := d.connection.SelectContext(ctx, &devices, query)
 
@@ -84,11 +87,11 @@ func (d *DevicesRepo) GetAll(ctx context.Context) (*[]data.Device, error){
 		return nil, err
 	}
 
-	return &devices, nil
+	return toDomainDeviceSlice(devices), nil
 }
 
-func (d *DevicesRepo) GetByProductNumber(ctx context.Context, productNumber string) (*data.Device, error){
-	var device data.Device
+func (d *DevicesRepo) GetByProductNumber(ctx context.Context, productNumber string) (*domain.Device, error){
+	var device entity.Device
 
 	query := `
 		SELECT InternalID, ProductNumber, MacAddress, FirmwareVersion, LastSeenAt, CreatedAt, ReTry, UpdateCheck, Status
@@ -101,7 +104,7 @@ func (d *DevicesRepo) GetByProductNumber(ctx context.Context, productNumber stri
 		return nil, err
 	}
 
-	 return &device, nil
+	 return toDomainDevice(device), nil
 }
 
 func (d *DevicesRepo) Update(ctx context.Context, productNumber string, parmas *external.UpdateDeviceParams) error{
@@ -155,29 +158,29 @@ func (d *DevicesRepo) GenerateUpdateQuery(params *external.UpdateDeviceParams) (
 	args := []interface{}{}
 
 	// 2. 파라미터로 받은 값들을 확인하며 쿼리 조립 (MySQL용 ? 플레이스홀더 사용)
-	if params.FirmwareVersion != nil {
+	if params.FirmwareVersion != "" {
 		setClauses = append(setClauses, "FirmwareVersion = ?")
-		args = append(args, *params.FirmwareVersion)
+		args = append(args, params.FirmwareVersion)
 	}
 
-	if params.LastSeenAt != nil {
+	if !params.LastSeenAt.IsZero() {
 		setClauses = append(setClauses, "LastSeenAt = ?")
-		args = append(args, *params.LastSeenAt)
+		args = append(args, params.LastSeenAt)
 	}
 
-	if params.ReTry != nil {
+	if params.ReTry != 0 {
 		setClauses = append(setClauses, "ReTry = ?")
-		args = append(args, *params.ReTry)
+		args = append(args, params.ReTry)
 	}
 
-	if params.UpdateCheck != nil {
+	if params.UpdateCheck != 0 {
 		setClauses = append(setClauses, "UpdateCheck = ?")
-		args = append(args, *params.UpdateCheck)
+		args = append(args, params.UpdateCheck)
 	}
 
-	if params.Status != nil {
+	if params.Status != "" {
 		setClauses = append(setClauses, "Status = ?")
-		args = append(args, *params.Status)
+		args = append(args, params.Status)
 	}
 
 	// 3. 변경할 내용이 없으면 아무것도 하지 않고 종료
@@ -192,4 +195,35 @@ func (d *DevicesRepo) GenerateUpdateQuery(params *external.UpdateDeviceParams) (
 	)
 
 	return query, args
+}
+
+// toDomainDevice는 entity를 domain 객체로 변환하는 매퍼 함수
+func toDomainDevice(e entity.Device) *domain.Device {
+    return &domain.Device{
+        InternalID:      e.InternalID,
+        ProductNumber:   e.ProductNumber,
+        MacAddress:      e.MacAddress,
+		FirmwareVersion: e.FirmwareVersion,
+		LastSeenAt:      e.LastSeenAt,
+		ReTry:           e.ReTry,
+		UpdateCheck:     e.UpdateCheck,
+        Status:          model.DeviceStatus(e.Status),
+    }
+}
+
+func toDomainDeviceSlice(entities []entity.Device) *[]domain.Device {
+    // 1. 결과로 반환할 domain 슬라이스를 미리 할당합니다.
+    // len(entities)를 사용하여 필요한 만큼의 공간을 정확히 만들어 성능을 최적화합니다.
+    domainDevices := make([]domain.Device, 0, len(entities))
+
+    // 2. entity 슬라이스를 순회합니다.
+    for _, e := range entities {
+        // 3. 각 entity를 domain 객체로 변환하여 새로운 슬라이스에 추가합니다.
+        if d := toDomainDevice(e); d != nil {
+            domainDevices = append(domainDevices, *d)
+        }
+    }
+
+    // 4. 변환이 완료된 슬라이스를 반환합니다.
+    return &domainDevices
 }

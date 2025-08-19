@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"go-rest-example/internal/logger"
-	"go-rest-example/internal/model/data"
+	"go-rest-example/internal/model"
+	"go-rest-example/internal/model/domain"
+	"go-rest-example/internal/model/entity"
 )
 
 // 필수 상수 선언
@@ -16,9 +18,9 @@ const (
 
 // ReportsRepo를 통해 사용할 메서드를 제약하고 규정하기 위한 인터페이스 
 type ReportsDataService interface {
-	Create(ctx context.Context, di *data.DeviceInfo) (int64, error)
-	GetAll(ctx context.Context) (*[]data.DeviceInfo, error)
-	GetByProductNumber(ctx context.Context, productNumber string) (*[]data.DeviceInfo, error)
+	Create(ctx context.Context, di *domain.DeviceInfo) (int64, error)
+	GetAll(ctx context.Context) (*[]domain.DeviceInfo, error)
+	GetByProductNumber(ctx context.Context, productNumber string) (*[]domain.DeviceInfo, error)
 	Delete(ctx context.Context, productNumber string)  error
 }
 
@@ -36,7 +38,7 @@ func NewReportsRepo(lgr *logger.AppLogger, db DBTX) *ReportsRepo {
 }
 
 // 주기보고 정보 row 생성
-func (r *ReportsRepo) Create(ctx context.Context, di *data.DeviceInfo) (int64, error) {
+func (r *ReportsRepo) Create(ctx context.Context, di *domain.DeviceInfo) (int64, error) {
 	// ReportAt 설정 (테이블에 DEFAULT가 없으면)
 	di.ReportAt = time.Now()
 
@@ -60,8 +62,8 @@ func (r *ReportsRepo) Create(ctx context.Context, di *data.DeviceInfo) (int64, e
 }
 
 // 장비 식별자 추가 필요 
-func (r *ReportsRepo) GetAll(ctx context.Context) (*[]data.DeviceInfo, error) {
-	var reports []data.DeviceInfo
+func (r *ReportsRepo) GetAll(ctx context.Context) (*[]domain.DeviceInfo, error) {
+	var reports []domain.DeviceInfo
 	query := `
 		SELECT ProductNumber, BatteryPercent, Lat, Lon, TemperatureCelsius, IP, ErrorCode, ReportAt, ReportedStatus
 		FROM reports
@@ -77,8 +79,8 @@ func (r *ReportsRepo) GetAll(ctx context.Context) (*[]data.DeviceInfo, error) {
 }
 
 // Device ID에 해당하는 정보 획득 (단일 반환으로 변경)
-func (r *ReportsRepo) GetByProductNumber(ctx context.Context, productNumber string) (*[]data.DeviceInfo, error) {
-	var reports []data.DeviceInfo
+func (r *ReportsRepo) GetByProductNumber(ctx context.Context, productNumber string) (*[]domain.DeviceInfo, error) {
+	var reports []entity.DeviceInfo
 	query := `
 		SELECT ProductNumber, BatteryPercent, Lat, Lon, TemperatureCelsius, IP, ErrorCode, ReportAt, ReportedStatus
 		FROM reports
@@ -91,7 +93,7 @@ func (r *ReportsRepo) GetByProductNumber(ctx context.Context, productNumber stri
 		r.logger.Error().Err(err).Str("productNumber", productNumber).Msg("failed to select reports by product number with sqlx")
 		return nil, err
 	}
-	return &reports, nil
+	return toDomainDeviceInfoSlice(reports), nil
 }
 
 // Device ID에 해당하는 정보 제거
@@ -110,4 +112,37 @@ func (r *ReportsRepo) Delete(ctx context.Context, productNumber string) error {
 	}
 
 	return nil
+}
+
+// toDomainDevice는 entity를 domain 객체로 변환하는 매퍼 함수
+func toDomainDeviceInfo(e entity.DeviceInfo) *domain.DeviceInfo {
+    return &domain.DeviceInfo{
+        ReportID:   	e.ReportID,
+		ProductNumber:  e.ProductNumber,
+		BatteryPercent: e.BatteryPercent,
+		Lat:      	 	e.Lat,
+		Lon:  			e.Lon,
+		TemperatureCelsius:   e.TemperatureCelsius,
+		IP:    			e.IP,
+		ErrorCode:      e.ErrorCode,
+		ReportAt: 		e.ReportAt,
+		ReportedStatus: model.DeviceStatus(e.ReportedStatus),
+    }
+}
+
+func toDomainDeviceInfoSlice(entities []entity.DeviceInfo) *[]domain.DeviceInfo {
+    // 1. 결과로 반환할 domain 슬라이스를 미리 할당합니다.
+    // len(entities)를 사용하여 필요한 만큼의 공간을 정확히 만들어 성능을 최적화합니다.
+    domainDevices := make([]domain.DeviceInfo, 0, len(entities))
+
+    // 2. entity 슬라이스를 순회합니다.
+    for _, e := range entities {
+        // 3. 각 entity를 domain 객체로 변환하여 새로운 슬라이스에 추가합니다.
+        if d := toDomainDeviceInfo(e); d != nil {
+            domainDevices = append(domainDevices, *d)
+        }
+    }
+
+    // 4. 변환이 완료된 슬라이스를 반환합니다.
+    return &domainDevices
 }

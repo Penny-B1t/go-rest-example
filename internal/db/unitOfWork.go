@@ -95,7 +95,11 @@ func (u *unitOfWork) Execute(ctx context.Context, fn func(IUnitOfWork)error)erro
 		return err		 
 	}
 
-	return tx.Commit()
+	err = tx.Commit()
+
+	u.Cleanup()
+
+	return err
 }
 
 func (u *unitOfWork) Cleanup() {

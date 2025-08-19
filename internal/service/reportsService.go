@@ -6,7 +6,7 @@ import (
 	"errors"
 
 	"go-rest-example/internal/db"
-	"go-rest-example/internal/model/data"
+	"go-rest-example/internal/model/domain"
 	"go-rest-example/internal/model/external"
 	"go-rest-example/internal/util"
 
@@ -56,7 +56,7 @@ func(r *ReportService) DeviceReport(parentCtx context.Context, reportReq externa
 		}
 
 		// 2-3. 보고 정보(report) 레코드 생성
-		report := data.DeviceInfo{
+		report := domain.DeviceInfo{
 			ProductNumber:      device.ProductNumber,
 			BatteryPercent:     reportReq.BatteryPercent,
 			Lat:                reportReq.Lat,
@@ -73,26 +73,30 @@ func(r *ReportService) DeviceReport(parentCtx context.Context, reportReq externa
 		// 2-4. 디바이스 상태 업데이트 (필요 시)
 		// 예: 마지막 접속 시간(LastSeenAt) 업데이트
 		updateParams := &external.UpdateDeviceParams{
-			LastSeenAt: &report.ReportAt,
-		}
-		// 에러 코드가 0이 아닌 경우, 재시도 횟수(ReTry) 증가
-		if reportReq.ErrorCode != 0 {
-			newRetryCount := device.ReTry + 1
-			updateParams.ReTry = &newRetryCount
-			device.ReTry = newRetryCount // 아래 제어 로직에서 사용하기 위해 로컬 변수도 업데이트
-		}
+					LastSeenAt: report.ReportAt,
+					FirmwareVersion: "",
+					ReTry: 0,
+					UpdateCheck: 0,
+					Status: "",
+				}
+
+		// 3. 비즈니스 로직: 재시도 횟수
+		updateParams.ReTry = device.NewRetry(reportReq.ErrorCode)
+		
 		if err := deviceRepo.Update(ctx, device.ProductNumber, updateParams); err != nil {
 			return error2.NewInternalServerError(err)
 		}
+		
 
-		// 3. 비즈니스 로직: 제어 명령 생성
+		// 3. 비즈니스 로직: 제어 명령 
 		powerOff := 0
-		if device.ReTry >= 3 { // 재부팅이 3회 이상 반복된 경우
+		if device.NeedsPowerOff() { // 재부팅이 3회 이상 반복된 경우
 			powerOff = 1
 		}
 
+		// 3. 비즈니스 로직: 제어 명령
 		reboot := 0
-		if powerOff != 1 && reportReq.ErrorCode != 0 { // 전원 차단 명령이 없고, 에러가 보고된 경우
+		if device.NeedsRebot(powerOff, reportReq.ErrorCode) { 
 			reboot = 1
 		}
 
